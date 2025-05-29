@@ -3,8 +3,7 @@ import asyncio
 from uagents import Agent, Context
 
 # Import models from common_models
-from uagents_app.common_models import AgentMessage, AgentResponse
-
+from uagents_app.common_models import AgentMessage, AgentResponse, response_queues
 # Import external services (from your existing app/services)
 from app.services.intent_classifier import IntentClassifier, QueryType
 
@@ -49,6 +48,18 @@ def _check_access(user_role: str, user_region: str, required_permissions: list[s
             logging.warning(f"Access denied for role '{user_role}'. Missing permission: '{req_perm}'")
             return False
     return True
+
+
+@intent_classifier.on_interval(period=0.5)
+async def check_query_queue(ctx: Context):
+    for request_id, queue in response_queues.items():
+        if not queue.empty():
+            try:
+                msg: AgentMessage = await queue.get()
+                await ctx.send(intent_classifier.address, msg)
+                logging.info(f"[IntentClassifier] Received query from FastAPI for user: {msg.user_context.get('user_id')} (req_id: {msg.request_id})")
+            except Exception as e:
+                logging.exception(f"[IntentClassifier] Error while getting message from queue: {e}")
 
 
 @intent_classifier.on_message(model=AgentMessage)

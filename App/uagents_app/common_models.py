@@ -1,5 +1,8 @@
+import asyncio
 from uagents import Model
 from typing import Dict, Any, Optional
+
+
 
 class AgentMessage(Model):
     query: str
@@ -20,3 +23,10 @@ class AgentResponse(Model):
     message: Optional[str] = None # For status messages
     chunk: Optional[str] = None # For streaming text chunks
     error: Optional[str] = None # For error messages
+
+
+# Type alias for response queues
+ResponseQueues = Dict[str, asyncio.Queue[AgentResponse]]
+
+# Global instance of response queues
+response_queues: ResponseQueues = {}
