@@ -1,4 +1,5 @@
 import logging
+from typing import AsyncGenerator
 from uagents import Agent, Context
 
 from uagents_app.common_models import AgentMessage, AgentResponse

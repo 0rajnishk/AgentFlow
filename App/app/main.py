@@ -81,7 +81,7 @@ async def startup_event():
 
     # Start the UAgents Bureau in a separate asyncio task
     logging.info("Starting UAgents Bureau as an asyncio task...")
-    asyncio.create_task(bureau.run())
+    asyncio.create_task(bureau.run_async())
     logging.info("UAgent Bureau task started.")
 
 # Expose the response_queues to be used by chat.py
