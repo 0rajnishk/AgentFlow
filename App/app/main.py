@@ -60,6 +60,12 @@ bureau.add(documentAgent)
 bureau.add(hybridAgent)
 bureau.add(errorHandler)
 
+# Expose the response_queues to be used by chat.py
+app.state.response_queues = response_queues
+app.state.uagent_bureau_running = False  # To track if bureau is ready
+app.state.bureau = bureau 
+
+
 # --- FastAPI Startup Events ---
 @app.on_event("startup")
 async def startup_event():

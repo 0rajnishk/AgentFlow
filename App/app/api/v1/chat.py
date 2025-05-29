@@ -97,7 +97,7 @@ async def websocket_endpoint(
     websocket: WebSocket,
     token: str = Query(...),
     db: Session = Depends(get_db),
-    request: Request = None # Access the FastAPI application instance
+    # request: Request = None # Access the FastAPI application instance
 ):
     client_id = None
     try:
@@ -123,10 +123,12 @@ async def websocket_endpoint(
             }
         })
 
-        # Get the response_queues from the FastAPI app state
-        response_queues = request.app.state.response_queues
-        # Get the UAgent Bureau instance
-        bureau = request.app.state.bureau # Make sure bureau is attached to app.state in main.py
+        # # Get the response_queues from the FastAPI app state
+        # response_queues = request.app.state.response_queues
+        # # Get the UAgent Bureau instance
+        # bureau = request.app.state.bureau # Make sure bureau is attached to app.state in main.py
+        response_queues = websocket.app.state.response_queues
+        bureau = websocket.app.state.bureau
 
         while True:
             try:

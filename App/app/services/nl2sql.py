@@ -15,7 +15,7 @@ class DatabaseManager:
 
     def init_database(self):
         """Initialize database from CSV if empty"""
-        if not os.path.exists(r"G:\Rajnish\Desktop\fetchai\AgentFlow\App\app\DataCoSupplyChainDataset.csv"):
+        if not os.path.exists(r"./DataCoSupplyChainDataset.csv"):
             logger.error("CSV file not found for data population.")
             return
 
@@ -96,7 +96,7 @@ class DatabaseManager:
         """)
 
         # Load data (your existing data loading remains the same)
-        df = pd.read_csv("G:\Rajnish\Desktop\fetchai\AgentFlow\App\app\DataCoSupplyChainDataset.csv", encoding="ISO-8859-1")
+        df = pd.read_csv(r"./DataCoSupplyChainDataset.csv", encoding="ISO-8859-1")
 
         customers_df = df[[
             "Customer Id", "Customer Fname", "Customer Lname", "Customer Email", "Customer City",
