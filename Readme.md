@@ -1,17 +1,17 @@
 ````markdown
 # Agent Flow
 
-**Agent Flow** is a modular agent-based system built using the `uagents` framework. It combines document retrieval, SQL querying, and large language model reasoning to answer natural language questions. This system routes queries intelligently across different specialized agents to provide accurate, explainable, and context-aware responses.
+Agent Flow is a agent-based system built using the `uagents` framework. It combines document retrieval, SQL querying, and large language model reasoning to answer natural language questions. This system routes queries intelligently across different specialized agents to provide accurate, explainable, and context-aware responses.
 
 ## Overview
 
 The system consists of several agents, each with a specific responsibility:
 
-- **Intent Classifier Agent**: Determines the type of user query (SQL, document, hybrid, or unknown).
-- **SQL Agent**: Translates natural language into SQL, executes it on a SQLite database (`project.db`), and summarizes the result.
-- **Document Agent**: Performs similarity search across document embeddings to answer context-based questions.
-- **Hybrid Agent**: Uses both similarity search and SQL execution for complex questions requiring multi-source reasoning.
-- **Error Handler Agent**: Handles misclassified or ambiguous queries using LLM's general knowledge capabilities.
+- Intent Classifier Agent: Determines the type of user query (SQL, document, hybrid, or unknown).
+- SQL Agent: Translates natural language into SQL, executes it on a SQLite database (`project.db`), and summarizes the result.
+- Document Agent: Performs similarity search across document embeddings to answer context-based questions.
+- Hybrid Agent: Uses both similarity search and SQL execution for complex questions requiring multi-source reasoning.
+- Error Handler Agent: Handles misclassified or ambiguous queries using LLM's general knowledge capabilities.
 
 ## Features
 
@@ -24,39 +24,23 @@ The system consists of several agents, each with a specific responsibility:
 
 ## Technologies Used
 
-- **Python**
-- **uagents** (Agent-based microservices framework)
-- **Google Gemini API** (LLM for SQL and natural language reasoning)
-- **SQLite** (Lightweight local database)
-- **Faiss or Chroma** (Vector store for similarity search)
+- Python
+- uagents (Agent-based microservices framework)
+- Google Gemini API (LLM for SQL and natural language reasoning)
+- SQLite (Lightweight local database)
+- Faiss (Vector store for similarity search)
 
 ## Flow Diagram
+<!-- ![Agent Flow Diagram](link) -->
 
-```text
-           +--------------------+
-           |    User Query      |
-           +--------+-----------+
-                    |
-                    v
-       +----------------------------+
-       | Intent Classifier Agent    |
-       +--+-----------+-------------+
-          |           |             |
-          v           v             v
-      +------+    +--------+    +-----------+
-      | SQL  |    | Hybrid |    | Document  |
-      |Agent |    | Agent  |    | Agent     |
-      +--+---+    +--------+    +-----------+
-         |
-         v
-   +-------------+
-   | SQLite DB   |
-   +-------------+
 
-  All responses go back to the
-  Intent Classifier Agent to be
-  returned to the user.
-````
+
+## Screenshots
+<!-- chatinterface
+![Chat Interface](https://raw.githubusercontent.com/0rajnishk/AgentFlow/main/screenshots/chat_interface.png) -->
+
+<!-- admin
+![Admin Interface](https://raw.githubusercontent.com/0rajnishk/AgentFlow/main/screenshots/admin_interface.png) -->
 
 ## Getting Started
 
@@ -121,6 +105,3 @@ python agents/error_handler.py
 
 
 
-```
-
----
