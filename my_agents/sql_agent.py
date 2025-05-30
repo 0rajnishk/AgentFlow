@@ -1,7 +1,7 @@
 """
 my_agents/sql_agent.py
 SQLAgent: converts NL query → SQL with Gemini, executes on SQLite
-(project.db), then gets Gemini to phrase the answer in natural language.
+(HospitalPatientRecordsDataset.db), then gets Gemini to phrase the answer in natural language.
 
 Requirements
 ------------
@@ -17,17 +17,22 @@ from typing import Any, Dict, List
 
 import google.generativeai as genai
 from uagents import Agent, Context, Model
-
+from dotenv import load_dotenv
+load_dotenv()
+GENAI_API_KEY =  os.getenv("GOOGLE_API_KEY")
+if not GENAI_API_KEY:
+    raise ValueError("GOOGLE_API_KEY environment variable not set. Please set it to your Google API key.")
 # ────────────────────────────────
 # Globals
 # ────────────────────────────────
 logger = logging.getLogger(__name__)
 
-DB_PATH = "project.db"
+DB_PATH = "../data/HospitalPatientRecordsDataset.db"
 assert os.path.exists(DB_PATH), f"SQLite database not found at {DB_PATH}"
 
-GOOGLE_API_KEY = 'AIzaSyAyau1UaTUWYDdYTKz37zzU94zhFhddzuA'
-genai.configure(api_key=GOOGLE_API_KEY)
+
+
+genai.configure(api_key=GENAI_API_KEY)
 GEMINI_MODEL = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
 
 # ────────────────────────────────
@@ -98,47 +103,109 @@ def _clean_sql_response(sql_query: str) -> str:
     return sql_query
 
 
+# def _generate_fallback_sql(nl_query: str) -> str:
+#     q = nl_query.lower()
+#     if "product" in q:
+#         return "SELECT ProductCardId, ProductName, ProductPrice FROM Products LIMIT 100;"
+#     if "customer" in q:
+#         return "SELECT CustomerId, Fname, Lname, City, State, Country FROM Customers LIMIT 100;"
+#     if "order" in q:
+#         return "SELECT OrderId, OrderDate, OrderStatus, OrderRegion, SalesPerCustomer FROM Orders LIMIT 100;"
+#     return "SELECT COUNT(*) AS total_records FROM Orders;"
+
+
+# Fallback SQL tuned for the hospital-patient schema
 def _generate_fallback_sql(nl_query: str) -> str:
     q = nl_query.lower()
-    if "product" in q:
-        return "SELECT ProductCardId, ProductName, ProductPrice FROM Products LIMIT 100;"
-    if "customer" in q:
-        return "SELECT CustomerId, Fname, Lname, City, State, Country FROM Customers LIMIT 100;"
-    if "order" in q:
-        return "SELECT OrderId, OrderDate, OrderStatus, OrderRegion, SalesPerCustomer FROM Orders LIMIT 100;"
-    return "SELECT COUNT(*) AS total_records FROM Orders;"
+    if "count" in q or "how many" in q:
+        # quick record count
+        return "SELECT COUNT(*) AS total_records FROM Patients;"
+    if "billing" in q or "amount" in q or "cost" in q:
+        return (
+            "SELECT Name, Billing_Amount "
+            "FROM Patients "
+            "ORDER BY Billing_Amount DESC "
+            "LIMIT 25;"
+        )
+    if "medication" in q:
+        return (
+            "SELECT Name, Medication, Medical_Condition "
+            "FROM Patients "
+            "WHERE Medication IS NOT NULL "
+            "LIMIT 50;"
+        )
+    if "age" in q:
+        return (
+            "SELECT Name, Age, Gender, Medical_Condition "
+            "FROM Patients "
+            "ORDER BY Age DESC "
+            "LIMIT 50;"
+        )
+    # safe default
+    return "SELECT * FROM Patients LIMIT 10;"
 
 
 def convert_to_sql(natural_language_query: str) -> str:
     schema_info = _get_schema_info()
-    prompt = f"""You are an expert SQL query generator for supply chain analytics. Convert the natural language query into a precise, optimized SQL query.
+    prompt = f"""You are an expert SQL generator for hospital patient-record analytics.
+Convert the natural-language question into a VALID SQLite SELECT statement.
 
+SCHEMA DEFINITION:
 {schema_info}
 
-Natural Language Query: "{natural_language_query}"
+QUESTION: "{natural_language_query}"
 
-CRITICAL INSTRUCTIONS:
-1. Generate ONLY the SQL query - no explanations, no markdown formatting, no additional text.
-2. Use exact column names as specified in the schema (case-sensitive).
-3. Use proper SQLite syntax and functions.
-4. IMPORTANT: Work only with the existing tables (Orders, Customers, Products) and their actual columns.
-5. Do NOT assume additional tables or columns that don't exist in the schema.
-6. For categorical filters, use the exact "sample values" provided in the schema.
-7. Use appropriate JOINs when querying multiple tables.
+CRITICAL RULES:
+1. **Output ONLY the SQL query** – no markdown, comments, or extra text.
+2. The query MUST start with SELECT and reference ONLY tables/columns shown in the schema.
+3. Use exact column names (case-sensitive) and correct SQLite syntax.
+4. Apply filters using precise column values when provided.
+5. Do NOT create/alter/drop/insert/update any table.
 
-SQL Query:"""
+SQL query:"""
 
     try:
         response = GEMINI_MODEL.generate_content(prompt, temperature=0.1)
         if not getattr(response, "text", "").strip():
-            logger.warning("Gemini returned empty response, using fallback SQL.")
+            logger.warning("Gemini returned empty response; falling back.")
             return _generate_fallback_sql(natural_language_query)
         sql_query = _clean_sql_response(response.text)
-        logger.info(f"Generated SQL: {sql_query}")
+        logger.info(f"[Medical DB] Generated SQL: {sql_query}")
         return sql_query
     except Exception as e:
-        logger.error(f"Gemini SQL generation failed: {e}")
+        logger.error(f"[Medical DB] SQL generation failed: {e}")
         return _generate_fallback_sql(natural_language_query)
+
+# def convert_to_sql(natural_language_query: str) -> str:
+#     schema_info = _get_schema_info()
+#     prompt = f"""You are an expert SQL query generator for supply chain analytics. Convert the natural language query into a precise, optimized SQL query.
+
+# {schema_info}
+
+# Natural Language Query: "{natural_language_query}"
+
+# CRITICAL INSTRUCTIONS:
+# 1. Generate ONLY the SQL query - no explanations, no markdown formatting, no additional text.
+# 2. Use exact column names as specified in the schema (case-sensitive).
+# 3. Use proper SQLite syntax and functions.
+# 4. IMPORTANT: Work only with the existing tables (Orders, Customers, Products) and their actual columns.
+# 5. Do NOT assume additional tables or columns that don't exist in the schema.
+# 6. For categorical filters, use the exact "sample values" provided in the schema.
+# 7. Use appropriate JOINs when querying multiple tables.
+
+# SQL Query:"""
+
+#     try:
+#         response = GEMINI_MODEL.generate_content(prompt, temperature=0.1)
+#         if not getattr(response, "text", "").strip():
+#             logger.warning("Gemini returned empty response, using fallback SQL.")
+#             return _generate_fallback_sql(natural_language_query)
+#         sql_query = _clean_sql_response(response.text)
+#         logger.info(f"Generated SQL: {sql_query}")
+#         return sql_query
+#     except Exception as e:
+#         logger.error(f"Gemini SQL generation failed: {e}")
+#         return _generate_fallback_sql(natural_language_query)
 
 
 # ────────────────────────────────

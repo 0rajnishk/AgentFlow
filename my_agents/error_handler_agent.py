@@ -2,7 +2,12 @@ from uagents import Agent, Context, Model
 import logging
 import os
 import google.generativeai as genai
+from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
+
+Ge
 # Configure Gemini API
 genai.configure(api_key='AIzaSyAyau1UaTUWYDdYTKz37zzU94zhFhddzuA')
 # gemini_model = genai.GenerativeModel("gemini-1.5-pro")

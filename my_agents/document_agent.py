@@ -20,6 +20,10 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter  # (used when saving)
 from langchain_community.document_loaders import PyPDFLoader        # (used when saving)
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 # ────────────────────────────────
 # Globals: embeddings + vectorstore
@@ -29,8 +33,9 @@ logger = logging.getLogger(__name__)
 DB_FOLDER = "vectorstores"
 os.makedirs(DB_FOLDER, exist_ok=True)
 
-GENAI_API_KEY =  "AIzaSyAyau1UaTUWYDdYTKz37zzU94zhFhddzuA"
-# GENAI_API_KEY =  "AIzaSyA9Gc5cT6cC8dgMYsITe-7FpgPVQuJ1bgQ"
+GENAI_API_KEY =  os.getenv("GOOGLE_API_KEY")
+if not GENAI_API_KEY:
+    raise ValueError("GOOGLE_API_KEY environment variable not set. Please set it to your Google API key.")
 
 embeddings = GoogleGenerativeAIEmbeddings(
     model="models/embedding-001", google_api_key=GENAI_API_KEY
@@ -102,26 +107,26 @@ def register_document_agent_handlers(document_agent: Agent, intent_classifier_ag
         context = "\n\n".join(d.page_content for d in docs)
         logger.info(f"Similarity search returned {len(docs)} chunks for context.")
 
-        # 2. Build prompt for Gemini
-        user_role = "employee"  # adjust as needed or add to AgentMessage
-        prompt = f"""You are a knowledgeable supply chain policy expert at Syngenta. A {user_role} has asked a question about company policies and procedures.
 
+        prompt = f"""
 **User Question:** "{msg.query}"
 
-**Relevant Policy Documents:**
+**Relevant Patient Documents:**
 {context}
 
 **Instructions:**
-1. Provide a comprehensive, accurate answer based ONLY on the provided documents
-2. Structure your response with clear headings and bullet points
+1. Answer the question using ONLY the document content above
+2. Include bullet points and headings for clarity
 
 **Response Structure:**
-- Start with a direct answer to the question
-- End with key takeaways or recommendations
+- Begin with a direct answer
+- Then elaborate in bullet points if needed
+- End with key takeaways or further steps
 
-**Important:** If the documents don't contain enough information to fully answer the question, clearly state what information is available and what might require additional consultation.
+**Important:** If the documents don't fully answer the question, clearly state what's known and what's missing.
 
 **Answer:**"""
+
 
         # 3. Call Gemini
         try:

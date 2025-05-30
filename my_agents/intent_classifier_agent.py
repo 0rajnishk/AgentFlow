@@ -16,8 +16,14 @@ from typing import Tuple
 
 import google.generativeai as genai
 from uagents import Agent, Context, Model
+from dotenv import load_dotenv
 
 
+load_dotenv()
+GENAI_API_KEY =  os.getenv("GOOGLE_API_KEY")
+
+if not GENAI_API_KEY:
+    raise ValueError("GOOGLE_API_KEY environment variable not set. Please set it to your Google API key.")
 # ────────────────────────────────
 # Common message model
 # ────────────────────────────────
@@ -36,17 +42,43 @@ RESPONSE_FILE_PATH = "response_from_agents.txt"
 # ────────────────────────────────
 # Gemini helper utilities
 # ────────────────────────────────
-PROMPT_TEMPLATE = """You are a precise query classifier for supply chain management systems.
+# PROMPT_TEMPLATE = """You are a precise query classifier for supply chain management systems.
+
+# TASK: Classify this query into exactly ONE category:
+
+# CATEGORIES:
+# - document_only: Asks about policies, procedures, definitions, compliance, or guidelines
+# - database_only: Asks for data, metrics, statistics, lists, counts, or performance analysis
+# - hybrid: Requires both policy knowledge AND data analysis
+# - unclear: Vague, incomplete, or ambiguous queries
+
+# USER: supply_chain_user
+# QUERY: "{query}"
+
+# CRITICAL: Respond with ONLY this exact JSON structure (no extra text):
+# {{
+#     "query_type": "document_only",
+#     "confidence": 0.95,
+#     "reasoning": "Brief explanation",
+#     "keywords": ["key", "terms"],
+#     "suggested_sources": ["documents"]
+# }}
+
+# IMPORTANT:
+# - suggested_sources must be an array, use ["documents"] OR ["database"] OR ["documents", "database"]
+# - Do NOT use "both" - use ["documents", "database"] instead
+# - Ensure all fields are properly formatted as JSON"""
+PROMPT_TEMPLATE = """You are a precise query classifier for a medical information management system.
 
 TASK: Classify this query into exactly ONE category:
 
 CATEGORIES:
-- document_only: Asks about policies, procedures, definitions, compliance, or guidelines
-- database_only: Asks for data, metrics, statistics, lists, counts, or performance analysis
-- hybrid: Requires both policy knowledge AND data analysis
+- document_only: Asks about patient background, biodata, history, doctor notes, or other narrative details
+- database_only: Asks for structured data like billing, test results, admissions, discharge dates, medications, etc.
+- hybrid: Requires both patient background and structured medical data
 - unclear: Vague, incomplete, or ambiguous queries
 
-USER: supply_chain_user
+USER: medical_info_user
 QUERY: "{query}"
 
 CRITICAL: Respond with ONLY this exact JSON structure (no extra text):
@@ -59,12 +91,14 @@ CRITICAL: Respond with ONLY this exact JSON structure (no extra text):
 }}
 
 IMPORTANT:
-- suggested_sources must be an array, use ["documents"] OR ["database"] OR ["documents", "database"]
-- Do NOT use "both" - use ["documents", "database"] instead
+- suggested_sources must be an array: use ["documents"] OR ["database"] OR ["documents", "database"]
+- Do NOT use "both" — use ["documents", "database"] instead
 - Ensure all fields are properly formatted as JSON"""
 
-# genai.configure(api_key="AIzaSyA9Gc5cT6cC8dgMYsITe-7FpgPVQuJ1bgQ")
-genai.configure(api_key="AIzaSyAyau1UaTUWYDdYTKz37zzU94zhFhddzuA")
+
+
+
+genai.configure(api_key=GENAI_API_KEY)
 
 
 def get_gemini_response(query: str) -> str:
