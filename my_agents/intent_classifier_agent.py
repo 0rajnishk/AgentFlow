@@ -73,8 +73,8 @@ PROMPT_TEMPLATE = """You are a precise query classifier for a medical informatio
 TASK: Classify this query into exactly ONE category:
 
 CATEGORIES:
-- document_only: Asks about patient background, biodata, history, doctor notes, or other narrative details
-- database_only: Asks for structured data like billing, test results, admissions, discharge dates, medications, etc.
+- document_only: background, biodata, history, doctor notes, symptoms observed, treatment plan, prescribed medications, follow-up recommendations, lifestyle adjustments, or other narrative details.
+- database_only: Asks for structured data like billing, test results, admissions, discharge dates, medications, etc.(Age,Gender,Blood Type,Medical Condition,Date of Admission,Doctor,Hospital,Insurance Provider,Billing Amount,Room Number,Admission Type	Discharge, Date, Medication, Test Results)
 - hybrid: Requires both patient background and structured medical data
 - unclear: Vague, incomplete, or ambiguous queries
 
@@ -137,9 +137,7 @@ def classify_query_with_gemini(query: str) -> Tuple[str, dict]:
     Fallback to 'unclear' on any error.
     """
     raw = get_gemini_response(query)
-    print(f"Gemini raw response: {raw}")  # Debug output
     cleaned = clean_model_response(raw)
-    print(f"Cleaned Gemini response: {cleaned}")  # Debug output
     try:
         parsed = json.loads(cleaned)
         return parsed.get("query_type", "unclear"), parsed
@@ -183,13 +181,11 @@ def register_intent_classifier_handlers(
     # ── Main on_message handler ──────────────────────────────────
     @intent_classifier_agent.on_message(model=AgentMessage)
     async def classify(ctx: Context, sender: str, msg: AgentMessage):
-        print("----------"*100)
-        print(f"{msg.request_id}:::{msg.query}")
+
         # log these above prints
         logging.info(
             "IntentClassifier: Received message from %s: %s (Request ID: %s)",
             sender,
-            msg.query,
             msg.request_id,
         )
         # If message comes back from downstream agents, write the final answer

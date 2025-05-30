@@ -29,6 +29,23 @@ def sanitize(name: str) -> str:
     name = re.sub(r"\s+", "_", name)
     return re.sub(r"[^\w]", "", name)
 
+def sanitize_column(col: str) -> str:
+    """
+    Sanitize a column name:
+      - Replace spaces with underscores
+      - If there is a capital letter followed by a small letter, insert underscore before capital
+      - Convert to lower-case
+      - Remove non-alphanumeric/underscore
+    """
+    # Replace spaces with underscores
+    col = re.sub(r"\s+", "_", col)
+    # Insert underscore before capital letters that are followed by lowercase (for CamelCase)
+    col = re.sub(r'(?<=[a-z0-9])([A-Z])', r'_\1', col)
+    # Convert to lower-case
+    col = col.lower()
+    # Remove non-alphanumeric/underscore
+    col = re.sub(r"[^\w]", "", col)
+    return col
 
 def excel_to_sqlite(xls_path: str, db_path: str | None = None) -> str:
     """Read *xls_path* and write an SQLite file.  
@@ -45,6 +62,9 @@ def excel_to_sqlite(xls_path: str, db_path: str | None = None) -> str:
         for sheet in excel.sheet_names:
             df = excel.parse(sheet)
             table_name = sanitize(sheet)
+
+            # Sanitize column names as per requirements
+            df.columns = [sanitize_column(col) for col in df.columns]
 
             # Write DataFrame → SQL table (replace if it already exists)
             df.to_sql(table_name, conn, if_exists="replace", index=False)

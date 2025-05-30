@@ -48,12 +48,12 @@ def load_vectorstore():
         path = os.path.join(DB_FOLDER, dir_name)
         if os.path.isdir(path):
             try:
-                logger.info(f"Attempting to load vectorstore from: {path}")
+                logger.info(f"Attempting to load vectorstore from: {path.split('---')[0]}")
                 store = FAISS.load_local(
                     path, embeddings, allow_dangerous_deserialization=True
                 )
                 stores.append(store)
-                logger.info(f"Successfully loaded vectorstore from: {path}")
+                logger.info(f"Successfully loaded vectorstore from: {path.split('---')[0]}")
             except Exception as e:
                 logger.error(f"Error loading store from {path}: {e}")
     if not stores:

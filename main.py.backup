@@ -168,10 +168,6 @@ doc = DocManager()
 @app.get("/")
 def get_index():
     return FileResponse("static/index.html")
-# ─── Index Route ───────────────────────────────────────────────────
-@app.get("/info")
-def get_index():
-    return FileResponse("static/info.html")
 
 # # ─── Admin Route ───────────────────────────────────────────────────
 # @app.get("/admin")
@@ -264,10 +260,11 @@ async def process_query(request: QueryRequest):
 # ─── New Endpoints ─────────────────────────────────────────────────
 @app.post("/upload-database")
 async def upload_database(file: UploadFile = File(...)):
-    # Save the uploaded SQLite file to ./data/db/ with its original filename
+    # Save the uploaded SQLite file to ./data/db/
     db_folder = os.path.join(os.path.dirname(__file__), "data", "db")
     os.makedirs(db_folder, exist_ok=True)
-    db_name = file.filename
+    ext = os.path.splitext(file.filename)[1]
+    db_name = "HospitalPatientRecordsDataset.db" if not ext or ext.lower() != ".db" else f"HospitalPatientRecordsDataset{ext}"
     save_path = os.path.join(db_folder, db_name)
     # Save the uploaded file
     with open(save_path, "wb") as f_out:
