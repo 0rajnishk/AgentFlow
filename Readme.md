@@ -102,6 +102,3 @@ python agents/error_handler.py
 2. Intent Classifier routes to SQL Agent.
 3. SQL Agent generates SQL using Gemini, executes on `project.db`, and summarizes.
 4. Response returned to the user through the intent classifier.
-
-
-
