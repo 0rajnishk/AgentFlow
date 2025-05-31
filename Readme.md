@@ -16,6 +16,8 @@ The system consists of several agents, each with a specific responsibility:
 - Document Agent: Performs similarity search across document embeddings to answer context-based questions.
 - Hybrid Agent: Uses both similarity search and SQL execution for complex questions requiring multi-source reasoning.
 - Error Handler Agent: Handles misclassified or ambiguous queries using LLM's general knowledge capabilities.
+### Agent Workflow Chart
+![Agents Workflow Chart](screenshots/agents-workflow-chart.png)
 
 ## Features
 
@@ -26,21 +28,30 @@ The system consists of several agents, each with a specific responsibility:
 - Hybrid reasoning that combines structured and unstructured data.
 - Fallback logic for gracefully handling unknown or poorly classified queries.
 
-## Technologies Used
+## FastAPI Application Summary
 
-- Python
-- uagents (Agent-based microservices framework)
-- Google ASI:ONE API (LLM for SQL and natural language reasoning)
-- SQLite (Lightweight local database)
-- Faiss (Vector store for similarity search)
+The backend is built with **FastAPI** and provides a secure, modular interface for document upload, vectorization, querying, and admin-controlled operations. Key highlights include:
 
-## Architecture Diagrams
+* **Document Upload & Processing**: Uploaded PDF documents are stored, chunked, and embedded using **Google Generative AI embeddings**. The chunks are indexed using **FAISS**, and stored in a local vector database directory for retrieval.
+* **Document Management**: A `DocManager` class handles all operations related to uploading, retrieving, listing, and deleting document metadata and vectorstore directories.
+* **Query Execution**: The `/query` endpoint writes natural language questions to a file (`query_to_agents.txt`) to be picked up by backend agents. Responses are read from `response_from_agents.txt` and returned to the user.
+* **Authentication**: Admin authentication is enabled via a login form, generating a session token to restrict document operations.
+* **SQLite Upload Support**: A separate endpoint allows uploading `.db` files for SQL-based agents to query against.
+* **CORS & Static Hosting**: CORS is fully enabled for dev flexibility. Static Vue.js frontend files are served from the `/static` directory.
 
-### Agent Workflow Chart
-![Agents Workflow Chart](screenshots/agents-workflow-chart.png)
+> **Frontend**: A lightweight **Vue.js** frontend is used, embedded directly via **Vue CDN** (`https://unpkg.com/vue@3`). This avoids build complexities and allows tight integration with the static file-based FastAPI hosting setup.
 
 ### FastAPI Workflow Chart
 ![FastAPI Workflow Chart](screenshots/fast-api-workflow-chart.png)
+
+
+## Technologies Used
+
+* **Python** – Core programming language for building the agent logic and backend.
+* **uAgents** – Agent-based microservices framework for defining and managing autonomous agents.
+* **Google ASI\:ONE API** – Used for advanced natural language understanding and SQL generation via large language models.
+* **SQLite** – Lightweight relational database for storing structured data such as orders, customers, and products.
+* **FAISS** – Facebook AI Similarity Search library for fast and efficient vector-based semantic retrieval over PDF documents.
 
 ## Screenshots
 
