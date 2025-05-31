@@ -73,9 +73,24 @@ Launch each agent independently or as a managed process depending on your archit
 python agents/sql_agent.py
 python agents/hybrid_agent.py
 python agents/document_agent.py
-python agents/intent_classifier.py
-python agents/error_handler.py
+python agents/error_handler_agent.py
 ```
+
+### update the address of each of the above agents in the intent_classifier.py file
+```python
+# Replace these with the actual addresses printed by each worker agent at startup
+SQL_AGENT_ADDR = "agent1qw4z53dh3ttmdqku5q0xpqm6s25a0g69fsgh3lr440ak38stvfcy79fh2lk"
+HYBRID_AGENT_ADDR = "agent1q0sh6f3n2r8azrs524chrn0e7h7p3qkm25v502jzczkrgjmtnhe972h2g64"
+DOC_AGENT_ADDR = "agent1q2tpmsy506wtsdn0j7823s2vdm7f50l485azzc6z8lh2zk50cqwevn03e6q"
+ERROR_AGENT_ADDR = "agent1q08hrn7j6t7ywmwdllrvl903t08sn4xd2ua2t4hy4kd6uxspqq0rgaudrpx"
+
+```
+
+
+```bash
+python agents/intent_classifier_agent.py
+```
+
 
 # Run them main.py our FastAPI server
 ```bash

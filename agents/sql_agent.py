@@ -23,6 +23,7 @@ from uagents_core.contrib.protocols.chat import (
     chat_protocol_spec,
 )
 from dotenv import load_dotenv
+import requests  # Added for ASI:ONE
 
 # Configure logging
 logging.basicConfig(
@@ -38,8 +39,18 @@ if not GENAI_API_KEY:
     logger.critical("GOOGLE_API_KEY environment variable not set.")
     raise ValueError("GOOGLE_API_KEY environment variable not set.")
 
+# ASI:ONE API setup
+ASI_ONE_API_KEY = os.getenv('ASI_ONE_API_KEY')
+if not ASI_ONE_API_KEY:
+    logger.critical("ASI_ONE_API_KEY environment variable not set.")
+    raise ValueError("ASI_ONE_API_KEY environment variable not set.")
+ASI_ONE_URL = "https://api.asi1.ai/v1/chat/completions"
+ASI_ONE_MODEL = "asi1-mini"  # or another model if desired
+ASI_ONE_TEMPERATURE = 0.7  # Set your desired temperature here
+ASI_ONE_MAX_TOKENS = 300  # Adjust as needed
+
 # Database setup
-db_files = glob.glob("../data/db/*.db")
+db_files = glob.glob("./data/db/*.db")
 if not db_files:
     logger.critical("No .db files found in ./data/db")
     raise FileNotFoundError("No .db files found in ./data/db")
@@ -182,6 +193,34 @@ def _generate_fallback_sql(nl_query: str) -> str:
     
     return "SELECT * FROM med LIMIT 10;"
 
+def asi_one_generate(prompt: str) -> str:
+    payload = json.dumps({
+        "model": ASI_ONE_MODEL,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": ASI_ONE_TEMPERATURE,
+        "stream": False,
+        "max_tokens": ASI_ONE_MAX_TOKENS
+    })
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': f'Bearer {ASI_ONE_API_KEY}'
+    }
+    try:
+        response = requests.post(ASI_ONE_URL, headers=headers, data=payload)
+        data = response.json()
+        if 'choices' in data and len(data['choices']) > 0:
+            message = data['choices'][0].get('message', {})
+            content = message.get('content', '')
+            return content.strip()
+        else:
+            return "No choices found in ASI:ONE response."
+    except Exception as e:
+        logger.error(f"ASI:ONE API error: {e}")
+        return "An error occurred while generating the answer with ASI:ONE."
+
 def convert_to_sql(natural_language_query: str) -> str:
     """Convert a natural-language question into a valid SQLite SELECT statement."""
     logger.info(f"Converting NL query to SQL: {natural_language_query!r}")
@@ -192,12 +231,12 @@ def convert_to_sql(natural_language_query: str) -> str:
 SCHEMA:
 {schema_info}
 
-QUESTION: "{natural_language_query}"
+QUESTION: \"{natural_language_query}\"
 
 RULES:
 1. Output ONLY the SQL (no markdown or comments).
 2. Use the exact column names shown.
-3. The ONLY table is "med". No joins to other tables.
+3. The ONLY table is \"med\". No joins to other tables.
 4. The query MUST start with SELECT and never modify data.
 
 SQL query:"""
@@ -205,15 +244,15 @@ SQL query:"""
     allowed_tables = ["med"]
 
     try:
-        # First attempt
-        logger.debug("Gemini prompt (attempt 1)")
-        response = GEMINI_MODEL.generate_content(base_prompt)
-        sql_query = _clean_sql_response(response.text)
+        # First attempt with ASI:ONE
+        logger.debug("ASI:ONE prompt (attempt 1)")
+        sql_query = asi_one_generate(base_prompt)
+        sql_query = _clean_sql_response(sql_query)
 
         # Validate: check referenced tables
         if not _is_sql_valid(sql_query, allowed_tables):
             bad_tables = _referenced_tables(sql_query)
-            logger.warning(f"Gemini used invalid tables {bad_tables}; retrying.")
+            logger.warning(f"ASI:ONE used invalid tables {bad_tables}; retrying.")
 
             # Second attempt (hard reminder)
             retry_prompt = (
@@ -221,12 +260,12 @@ SQL query:"""
                 + "\n\nIMPORTANT: You MUST use only the table \"med\". "
                   "Do NOT invent or join other tables. Regenerate now."
             )
-            response = GEMINI_MODEL.generate_content(retry_prompt)
-            sql_query = _clean_sql_response(response.text)
+            sql_query = asi_one_generate(retry_prompt)
+            sql_query = _clean_sql_response(sql_query)
 
         # Final validation
         if not _is_sql_valid(sql_query, allowed_tables):
-            raise ValueError("Gemini still produced invalid tables after retry.")
+            raise ValueError("ASI:ONE still produced invalid tables after retry.")
 
         logger.info(f"Generated SQL: {sql_query}")
         return sql_query
@@ -277,12 +316,12 @@ def _prepare_data_summary(data: List[Dict[str, Any]]) -> str:
     return "\n".join(summary_parts)
 
 def generate_answer(original_query: str, sql_query: str, data: List[Dict[str, Any]]) -> str:
-    """Generates a natural language answer using Gemini."""
+    """Generates a natural language answer using ASI:ONE."""
     data_summary = _prepare_data_summary(data)
     prompt = f"""Based on the following data, generate a helpful and natural language answer to the original question.
 
-Original Question: "{original_query}"
-SQL Query Executed: "{sql_query}"
+Original Question: \"{original_query}\"
+SQL Query Executed: \"{sql_query}\"
 Data Retrieved: {data_summary}
 
 ANSWER REQUIREMENTS:
@@ -295,13 +334,13 @@ ANSWER REQUIREMENTS:
 
 Answer:"""
     try:
-        logger.debug("Sending answer generation prompt to Gemini")
-        response = GEMINI_MODEL.generate_content(prompt)
-        logger.info("Gemini answer generation successful.")
-        return response.text.strip()
+        logger.debug("Sending answer generation prompt to ASI:ONE")
+        answer = asi_one_generate(prompt)
+        logger.info("ASI:ONE answer generation successful.")
+        return answer
     except Exception as e:
-        logger.error(f"Gemini answer generation failed: {e}")
-        return "An error occurred while generating the answer."
+        logger.error(f"ASI:ONE answer generation failed: {e}")
+        return "An error occurred while generating the answer with ASI:ONE."
 
 # ---------- STARTUP HANDLER ----------
 @sql_agent.on_event("startup")

@@ -38,6 +38,7 @@ from uagents_core.contrib.protocols.chat import (
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from dotenv import load_dotenv
+import requests  # Added for ASI:ONE
 
 
 load_dotenv()
@@ -52,7 +53,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # SQLite – hospital records
-db_files = glob.glob("../data/db/*.db")
+db_files = glob.glob("./data/db/*.db")
 if not db_files:
     raise FileNotFoundError("No .db files found in ./data/db")
 DB_PATH = db_files[0]
@@ -65,16 +66,16 @@ VECTOR_FOLDER = "./vectorstores"        # keep your existing path if different
 os.makedirs(VECTOR_FOLDER, exist_ok=True)
 
 # Gemini
-GOOGLE_API_KEY = GENAI_API_KEY
-if not GOOGLE_API_KEY:
-    raise RuntimeError("Please set GOOGLE_API_KEY environment variable.")
-genai.configure(api_key=GOOGLE_API_KEY)
-GEMINI_MODEL = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
+# GOOGLE_API_KEY = GENAI_API_KEY
+# if not GOOGLE_API_KEY:
+#     raise RuntimeError("Please set GOOGLE_API_KEY environment variable.")
+# genai.configure(api_key=GOOGLE_API_KEY)
+# GEMINI_MODEL = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
 
 # Embeddings + vectorstore loader
 embeddings = GoogleGenerativeAIEmbeddings(
     model="models/embedding-001",
-    google_api_key=GOOGLE_API_KEY
+    google_api_key=GENAI_API_KEY
 )
 
 def _load_vectorstore() -> FAISS | None:
@@ -438,32 +439,8 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
                 
                 data_context = _prepare_data_summary(data_rows)
 
-                # 3️⃣ Gemini synthesis
-                prompt = f"""You are a medical case analyst. Use BOTH the patient biodata excerpts and the database results to provide a comprehensive answer.
-
-**User Question:** \"{user_query}\"
-
-**Patient Document Excerpts:**
-{doc_context or "No relevant excerpts found."}
-
-**Database Results (JSON):**
-{data_context}
-
-INSTRUCTIONS:
-- Rely strictly on the information above.
-- Structure the answer with clear headings and bullet points.
-- End with a short conclusion or recommendation.
-- If either source lacks enough detail, explicitly note the gap.
-
-Answer:"""
-                
-                try:
-                    resp = GEMINI_MODEL.generate_content(prompt)
-                    answer = resp.text.strip()
-                    ctx.logger.info("HybridAgent: Successfully generated comprehensive answer")
-                except Exception as e:
-                    ctx.logger.error(f"Gemini synthesis failed: {e}")
-                    answer = "HybridAgent encountered an error while composing the answer."
+                # 3️⃣ ASI:ONE synthesis (replaces Gemini)
+                answer = generate_asi_one_response(user_query, doc_context, data_context)
 
             except Exception as e:
                 ctx.logger.error(f"HybridAgent processing error: {e}")
@@ -483,6 +460,50 @@ async def handle_ack(ctx: Context, sender: str, msg: ChatAcknowledgement):
     ctx.logger.info(f"HybridAgent: Received acknowledgement from {sender} for {msg.acknowledged_msg_id}")
 
 hybrid_agent.include(chat_proto, publish_manifest=True)
+
+# ────────────────────────────────
+# ASI:ONE API setup
+# ────────────────────────────────
+ASI_ONE_API_KEY = os.getenv('ASI_ONE_API_KEY')
+if not ASI_ONE_API_KEY:
+    raise ValueError("ASI_ONE_API_KEY environment variable not set. Please set it to your ASI:ONE API key.")
+ASI_ONE_URL = "https://api.asi1.ai/v1/chat/completions"
+ASI_ONE_MODEL = "asi1-mini"  # or another model if desired
+ASI_ONE_TEMPERATURE = 0.7  # Set your desired temperature here
+ASI_ONE_MAX_TOKENS = 300  # Adjust as needed
+
+
+def generate_asi_one_response(user_query: str, doc_context: str, data_context: str) -> str:
+    """
+    Generate a response using ASI:ONE API, combining user query, document context, and data context.
+    """
+    prompt = f"""You are a medical case analyst. Use BOTH the patient biodata excerpts and the database results to provide a comprehensive answer.\n\n**User Question:** \"{user_query}\"\n\n**Patient Document Excerpts:**\n{doc_context or 'No relevant excerpts found.'}\n\n**Database Results (JSON):**\n{data_context}\n\nINSTRUCTIONS:\n- Rely strictly on the information above.\n- Structure the answer with clear headings and bullet points.\n- End with a short conclusion or recommendation.\n- If either source lacks enough detail, explicitly note the gap.\n\nAnswer:"""
+    payload = json.dumps({
+        "model": ASI_ONE_MODEL,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": ASI_ONE_TEMPERATURE,
+        "stream": False,
+        "max_tokens": ASI_ONE_MAX_TOKENS
+    })
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': f'Bearer {ASI_ONE_API_KEY}'
+    }
+    try:
+        response = requests.post(ASI_ONE_URL, headers=headers, data=payload)
+        data = response.json()
+        if 'choices' in data and len(data['choices']) > 0:
+            message = data['choices'][0].get('message', {})
+            content = message.get('content', '')
+            return content.strip()
+        else:
+            return "No choices found in ASI:ONE response."
+    except Exception as e:
+        logger.error(f"ASI:ONE API error: {e}")
+        return f"HybridAgent encountered an error while composing the answer with ASI:ONE."
 
 if __name__ == "__main__":
     hybrid_agent.run()

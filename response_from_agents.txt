@@ -1,0 +1,39 @@
+2ed467de-092b-4b45-9907-d4ce20781116:::### Medical Background and Billing Summary for Andrew Watts
+
+#### **Patient Overview**
+- **Name:** Andrew Watts  
+- **Date of Birth:** May 11, 1992 (Estimated)  
+- **Place of Origin:** Dublin, Ireland  
+- **Current Location:** Edinburgh, Scotland  
+- **Nationality:** Irish  
+- **Highest Education:** Bachelor's in Information Technology  
+- **Profession:** Software Developer  
+
+#### **Medical History**
+- **Past Medical History:**  
+  - Diagnosed with **mild anemia**  
+  - History of **seasonal asthma** as a child  
+  - No past surgeries recorded  
+- **Allergies:**  
+  - **Latex**  
+  - **Specific antibiotics** (not specified in detail)  
+
+#### **Current Medical Condition**
+- **Diagnosis:** **Diabetes** (Elective treatment)  
+- **Hospital:** Hernandez Rogers and Vang  
+- **Primary Doctor:** Dr. Kevin Wells  
+- **Medication Prescribed:** Ibuprofen  
+- **Test Results:** Abnormal  
+
+#### **Admission and Insurance Details**
+- **Admission Type:** Elective  
+- **Discharge Date:** December 18, 2020  
+- **Room Number:** 450  
+- **Insurance Provider:** Medicare  
+
+#### **Total Medical Bill**
+- **Billing Amount:** **$37,909.78**  
+
+---
+
+### **

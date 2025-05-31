@@ -14,6 +14,8 @@ import logging
 from datetime import datetime
 from uuid import uuid4
 from typing import List
+import json
+import requests
 
 import google.generativeai as genai
 from uagents import Agent, Protocol, Context
@@ -39,7 +41,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-DB_FOLDER = "../vectorstores"
+DB_FOLDER = "./vectorstores"
 os.makedirs(DB_FOLDER, exist_ok=True)
 
 GENAI_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -76,6 +78,51 @@ def load_vectorstore():
     return base
 
 VECTORSTORE = load_vectorstore()
+
+# ────────────────────────────────
+# ASI:ONE API setup
+# ────────────────────────────────
+ASI_ONE_API_KEY = os.getenv('ASI_ONE_API_KEY')
+if not ASI_ONE_API_KEY:
+    raise ValueError("ASI_ONE_API_KEY environment variable not set. Please set it to your ASI:ONE API key.")
+ASI_ONE_URL = "https://api.asi1.ai/v1/chat/completions"
+ASI_ONE_MODEL = "asi1-mini"  # or another model if desired
+ASI_ONE_TEMPERATURE = 0.7  # Set your desired temperature here
+ASI_ONE_MAX_TOKENS = 300  # Adjust as needed
+
+
+def generate_asi_one_response(user_query: str, context: str) -> str:
+    """
+    Generate a response using ASI:ONE API, combining user query and document context.
+    """
+    prompt = f"""
+**User Question:** \"{user_query}\"\n\n**Relevant Patient Documents:**\n{context}\n\n**Instructions:**\n1. Answer the question using ONLY the document content above\n2. Include bullet points and headings for clarity\n\n**Response Structure:**\n- Begin with a direct answer\n- Then elaborate in bullet points if needed\n- End with key takeaways or further steps\n\n**Important:** If the documents don't fully answer the question, clearly state what's known and what's missing.\n\n**Answer:**"""
+    payload = json.dumps({
+        "model": ASI_ONE_MODEL,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": ASI_ONE_TEMPERATURE,
+        "stream": False,
+        "max_tokens": ASI_ONE_MAX_TOKENS
+    })
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': f'Bearer {ASI_ONE_API_KEY}'
+    }
+    try:
+        response = requests.post(ASI_ONE_URL, headers=headers, data=payload)
+        data = response.json()
+        if 'choices' in data and len(data['choices']) > 0:
+            message = data['choices'][0].get('message', {})
+            content = message.get('content', '')
+            return content.strip()
+        else:
+            return "No choices found in ASI:ONE response."
+    except Exception as e:
+        logger.error(f"ASI:ONE API error: {e}")
+        return f"DocumentAgent encountered an error while composing the answer with ASI:ONE."
 
 # ────────────────────────────────
 # Gemini model (text generation)
@@ -129,37 +176,8 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
                     context = "\n\n".join(d.page_content for d in docs)
                     ctx.logger.info(f"Similarity search returned {len(docs)} chunks for context.")
 
-                    # 3. Create prompt for Gemini
-                    prompt = f"""
-**User Question:** \"{user_query}\"
-
-**Relevant Patient Documents:**
-{context}
-
-**Instructions:**
-1. Answer the question using ONLY the document content above
-2. Include bullet points and headings for clarity
-
-**Response Structure:**
-- Begin with a direct answer
-- Then elaborate in bullet points if needed
-- End with key takeaways or further steps
-
-**Important:** If the documents don't fully answer the question, clearly state what's known and what's missing.
-
-**Answer:**"""
-
-                    # 4. Call Gemini for answer generation
-                    try:
-                        response = GEMINI_MODEL.generate_content(prompt)
-                        answer_text = response.text.strip()
-                        ctx.logger.info("DocumentAgent: Successfully generated answer using document context")
-                    except Exception as e:
-                        ctx.logger.error(f"Gemini generation failed: {e}")
-                        answer_text = (
-                            "DocumentAgent encountered an error while generating the answer. "
-                            "Please try rephrasing your question or check if the documents contain relevant information."
-                        )
+                    # 3. Create prompt for ASI:ONE (replaces Gemini)
+                    answer_text = generate_asi_one_response(user_query, context)
 
             except Exception as e:
                 ctx.logger.error(f"DocumentAgent processing error: {e}")

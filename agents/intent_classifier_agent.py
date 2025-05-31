@@ -1,6 +1,6 @@
 # intent_classifier_agent.py
 """
-Intent Classifier Agent with real Gemini-based classification logic
+Intent Classifier Agent with real ASI:ONE-based classification logic
 Uses chat protocols for communication between agents
 Handles queries from FastAPI/file and from any agent (including unknown/other agents).
 """
@@ -13,7 +13,7 @@ from datetime import datetime
 from uuid import uuid4
 from typing import Tuple, Dict
 
-import google.generativeai as genai
+import requests
 from uagents import Agent, Protocol, Context
 from uagents_core.contrib.protocols.chat import (
     ChatAcknowledgement,
@@ -25,13 +25,10 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-GENAI_API_KEY = os.getenv("GOOGLE_API_KEY")
+ASI_ONE_API_KEY = os.getenv("ASI_ONE_API_KEY")
 
-if not GENAI_API_KEY:
-    raise ValueError("GOOGLE_API_KEY environment variable not set. Please set it to your Google API key.")
-
-# Configure Gemini
-genai.configure(api_key=GENAI_API_KEY)
+if not ASI_ONE_API_KEY:
+    raise ValueError("ASI_ONE_API_KEY environment variable not set. Please set it to your ASI:ONE API key.")
 
 # ---------- AGENT SETUP ----------
 intent_classifier = Agent(
@@ -42,23 +39,23 @@ intent_classifier = Agent(
 )
 
 # Replace these with the actual addresses printed by each worker agent at startup
-SQL_AGENT_ADDR = "agent1qdqugwl544acynqy9adencrw9kd5hs6jlu6cdmkzhqhzueeflktcgv4w3y5"
-DOC_AGENT_ADDR = "agent1q2tpmsy506wtsdn0j7823s2vdm7f50l485azzc6z8lh2zk50cqwevn03e6q"
-HYBRID_AGENT_ADDR = "agent1q0sh6f3n2r8azrs524chrn0e7h7p3qkm25v502jzczkrgjmtnhe972h2g64"
-ERROR_AGENT_ADDR = "agent1q08hrn7j6t7ywmwdllrvl903t08sn4xd2ua2t4hy4kd6uxspqq0rgaudrpx"
+SQL_AGENT_ADDR = "agent1qw4z53dh3ttmdqku5q0xpqm6s25a0g69fsgh3lr440ak38stvfcy79fh2lk"
+HYBRID_AGENT_ADDR = "agent1qf05xu5emqz3y7gemadh08ekxnxvs6g9kj0ha068n8y3mzh94sn7cwrwlc8"
+DOC_AGENT_ADDR = "agent1qg4kpt4nmjckg9umkapx7v45mx8h02342mhn8g0aez5lzzx0mcj72a0ncfj"
+ERROR_AGENT_ADDR = "agent1qwvwv4egqq982vdy69k76fdt5fx6zeu7w37ljew23wtn5r7w0sxu5zkwg4s"
 
 WORKER_ADDRS = {SQL_AGENT_ADDR, DOC_AGENT_ADDR, HYBRID_AGENT_ADDR, ERROR_AGENT_ADDR}
 
 chat_proto = Protocol(spec=chat_protocol_spec)
 
 # File paths for FastAPI ↔ agents IPC
-QUERY_FILE_PATH = "../query_to_agents.txt"
-RESPONSE_FILE_PATH = "../response_from_agents.txt"
+QUERY_FILE_PATH = "./query_to_agents.txt"
+RESPONSE_FILE_PATH = "./response_from_agents.txt"
 
 # In-memory mapping: request_id -> original sender (for agent-to-agent queries)
 REQUEST_SENDER_MAP: Dict[str, str] = {}
 
-# Gemini prompt template
+# ASI:ONE prompt template
 PROMPT_TEMPLATE = """You are a precise query classifier for a medical information management system.
 
 TASK: Classify this query into exactly ONE category:
@@ -86,15 +83,39 @@ IMPORTANT:
 - Do NOT use "both" — use ["documents", "database"] instead
 - Ensure all fields are properly formatted as JSON"""
 
-def get_gemini_response(query: str) -> str:
-    """Send prompt to Gemini and return raw text response."""
-    model = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
+def get_asi_one_response(query: str) -> str:
+    """Send prompt to ASI:ONE and return raw text response."""
+    url = "https://api.asi1.ai/v1/chat/completions"
     prompt = PROMPT_TEMPLATE.format(query=query)
+    payload = json.dumps({
+        "model": "asi1-mini",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.7,
+        "stream": False,
+        "max_tokens": 200
+    })
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': f'Bearer {ASI_ONE_API_KEY}'
+    }
     try:
-        response = model.generate_content(prompt)
-        return response.text
+        response = requests.post(url, headers=headers, data=payload)
+        data = response.json()
+        if 'choices' in data and len(data['choices']) > 0:
+            message = data['choices'][0].get('message', {})
+            content = message.get('content', '')
+            return content
+        else:
+            logging.error("No choices found in ASI:ONE response.")
+            return ""
     except Exception as e:
-        logging.exception("Gemini request failed")
+        logging.exception("ASI:ONE request failed")
         return f"Error: {e}"
 
 def clean_model_response(text: str) -> str:
@@ -114,18 +135,18 @@ def clean_model_response(text: str) -> str:
 
     return text.strip()
 
-def classify_query_with_gemini(query: str) -> Tuple[str, dict]:
+def classify_query_with_asi_one(query: str) -> Tuple[str, dict]:
     """
-    Return the category chosen by Gemini and full parsed result.
+    Return the category chosen by ASI:ONE and full parsed result.
     Fallback to 'unclear' on any error.
     """
-    raw = get_gemini_response(query)
+    raw = get_asi_one_response(query)
     cleaned = clean_model_response(raw)
     try:
         parsed = json.loads(cleaned)
         return parsed.get("query_type", "unclear"), parsed
     except Exception:
-        logging.error("Failed to parse Gemini output: %s", cleaned)
+        logging.error("Failed to parse ASI:ONE output: %s", cleaned)
         return "unclear", {}
 
 # ---------- READ USER QUERY FROM FILE ----------
@@ -220,10 +241,10 @@ async def classify_and_route(ctx: Context, sender: str, msg: ChatMessage):
             REQUEST_SENDER_MAP[request_id] = sender
             ctx.logger.info(f"IntentClassifier: Received query from agent {sender} (ID: {request_id})")
 
-        # Run Gemini classification
-        category, parsed = classify_query_with_gemini(query_text)
+        # Run ASI:ONE classification
+        category, parsed = classify_query_with_asi_one(query_text)
         ctx.logger.info(
-            f"IntentClassifier: Gemini classified '{query_text}' as {category} | confidence={parsed.get('confidence')}"
+            f"IntentClassifier: ASI:ONE classified '{query_text}' as {category} | confidence={parsed.get('confidence')}"
         )
 
         # Determine destination agent
