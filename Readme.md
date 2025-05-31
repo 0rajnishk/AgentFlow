@@ -53,6 +53,28 @@ The backend is built with **FastAPI** and provides a secure, modular interface f
 * **SQLite** – Lightweight relational database for storing structured data such as orders, customers, and products.
 * **FAISS** – Facebook AI Similarity Search library for fast and efficient vector-based semantic retrieval over PDF documents.
 
+ ![tag : innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
+## 🛰️ Agent Addresses (Innovation Lab)
+
+This project is part of the **Fetch.ai Innovation Lab** and includes the following autonomous agents:
+
+- **Main Agent (Intent Classifier Agent)**  
+  `test-agent://agent1qv68xelknm87mqkw3v8czfw3fnujdwzra09x8m32ff43lwzeefe67h9d675`
+
+- **Document Agent**  
+  `test-agent://agent1qg4kpt4nmjckg9umkapx7v45mx8h02342mhn8g0aez5lzzx0mcj72a0ncfj`
+
+- **Hybrid Agent**  
+  `test-agent://agent1qf05xu5emqz3y7gemadh08ekxnxvs6g9kj0ha068n8y3mzh94sn7cwrwlc8`
+
+- **SQL Agent**  
+  `test-agent://agent1qw4z53dh3ttmdqku5q0xpqm6s25a0g69fsgh3lr440ak38stvfcy79fh2lk`
+
+- **Worker Agent Address**  
+  `test-agent://agent1qv68xelknm87mqkw3v8czfw3fnujdwzra09x8m32ff43lwzeefe67h9d675`
+
+ 
+
 ## Screenshots
 
 ### Chat Interface
