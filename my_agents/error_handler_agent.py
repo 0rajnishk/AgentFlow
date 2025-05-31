@@ -7,9 +7,12 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+GENAI_API_KEY =  os.getenv("GOOGLE_API_KEY")
+if not GENAI_API_KEY:
+    raise ValueError("GOOGLE_API_KEY environment variable not set. Please set it to your Google API key.")
 
 # Configure Gemini API
-genai.configure(api_key='AIzaSyAyau1UaTUWYDdYTKz37zzU94zhFhddzuA')
+genai.configure(api_key=GENAI_API_KEY)
 # gemini_model = genai.GenerativeModel("gemini-1.5-pro")
 gemini_model = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
 
