@@ -17,7 +17,9 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from dotenv import load_dotenv
 
+load_dotenv()
 
 # ─── Logging Setup ─────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -63,7 +65,11 @@ os.makedirs(DB_FOLDER, exist_ok=True)
 os.makedirs(DATA_FOLDER, exist_ok=True)
 
 # ─── Google Gemini Embeddings ──────────────────────────────────────
-GENAI_API_KEY = "AIzaSyAyau1UaTUWYDdYTKz37zzU94zhFhddzuA"  # Export this in your environment
+
+GENAI_API_KEY = os.getenv("GOOGLE_API_KEY")
+if not GENAI_API_KEY:
+    raise ValueError("GOOGLE_API_KEY environment variable not set. Please set it to your Google API key.")
+
 embeddings = GoogleGenerativeAIEmbeddings(
     model="models/embedding-001", google_api_key=GENAI_API_KEY
 )
