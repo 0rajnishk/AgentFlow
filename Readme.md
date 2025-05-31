@@ -16,7 +16,7 @@ The system consists of several agents, each with a specific responsibility:
 
 - Modular agent architecture using `uagents`.
 - SQLite database (`project.db`) for structured supply chain data.
-- LLM-powered SQL generation using Gemini.
+- LLM-powered SQL generation using ASI:ONE.
 - Document-based similarity search for unstructured data.
 - Hybrid reasoning that combines structured and unstructured data.
 - Fallback logic for gracefully handling unknown or poorly classified queries.
@@ -25,7 +25,7 @@ The system consists of several agents, each with a specific responsibility:
 
 - Python
 - uagents (Agent-based microservices framework)
-- Google Gemini API (LLM for SQL and natural language reasoning)
+- Google ASI:ONE API (LLM for SQL and natural language reasoning)
 - SQLite (Lightweight local database)
 - Faiss (Vector store for similarity search)
 
@@ -98,7 +98,7 @@ cd agent-flow
 Create a `.env` file or export the following environment variable:
 
 ```bash
-export GOOGLE_API_KEY="your-gemini-api-key"
+export GOOGLE_API_KEY="your-ASI:ONE-api-key"
 ```
 
 ### 3. Install Dependencies
@@ -144,5 +144,5 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 
 1. User asks: *"Show me the top 5 most expensive products."*
 2. Intent Classifier routes to SQL Agent.
-3. SQL Agent generates SQL using Gemini, executes on `project.db`, and summarizes.
+3. SQL Agent generates SQL using ASI:ONE, executes on `project.db`, and summarizes.
 4. Response returned to the user through the intent classifier.
