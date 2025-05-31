@@ -1,3 +1,4 @@
+ ![tag : innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 # Agent Flow
 
 Agent Flow is a agent-based system built using the `uagents` framework. It combines document retrieval, SQL querying, and large language model reasoning to answer natural language questions. This system routes queries intelligently across different specialized agents to provide accurate, explainable, and context-aware responses.
@@ -53,7 +54,7 @@ The backend is built with **FastAPI** and provides a secure, modular interface f
 * **SQLite** – Lightweight relational database for storing structured data such as orders, customers, and products.
 * **FAISS** – Facebook AI Similarity Search library for fast and efficient vector-based semantic retrieval over PDF documents.
 
- ![tag : innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
+
 ## 🛰️ Agent Addresses (Innovation Lab)
 
 This project is part of the **Fetch.ai Innovation Lab** and includes the following autonomous agents:
