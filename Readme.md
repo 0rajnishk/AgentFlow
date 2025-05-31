@@ -1,4 +1,3 @@
-````markdown
 # Agent Flow
 
 Agent Flow is a agent-based system built using the `uagents` framework. It combines document retrieval, SQL querying, and large language model reasoning to answer natural language questions. This system routes queries intelligently across different specialized agents to provide accurate, explainable, and context-aware responses.
@@ -30,17 +29,60 @@ The system consists of several agents, each with a specific responsibility:
 - SQLite (Lightweight local database)
 - Faiss (Vector store for similarity search)
 
-## Flow Diagram
-<!-- ![Agent Flow Diagram](link) -->
+## Architecture Diagrams
 
+### Agent Workflow Chart
+![Agents Workflow Chart](screenshots/agents-workflow-chart.png)
 
+### FastAPI Workflow Chart
+![FastAPI Workflow Chart](screenshots/fast-api-workflow-chart.png)
 
 ## Screenshots
-<!-- chatinterface
-![Chat Interface](https://raw.githubusercontent.com/0rajnishk/AgentFlow/main/screenshots/chat_interface.png) -->
 
-<!-- admin
-![Admin Interface](https://raw.githubusercontent.com/0rajnishk/AgentFlow/main/screenshots/admin_interface.png) -->
+### Chat Interface
+![Chat Interface](screenshots/chat-interface.png)
+
+### Admin Panel
+
+#### Admin Login
+![Admin Login](screenshots/admin-login.png)
+
+#### Document Management
+![Admin Documents](screenshots/admin-documents.png)
+
+#### Document Upload
+![Admin Document Upload](screenshots/admin-document-upload.png)
+
+#### Database Upload
+![Admin Database Upload](screenshots/admin-database-upload.png)
+
+#### Database Connection Details
+![Admin Database Connection Details](screenshots/admin-database-connection-details.png)
+
+### AgentVerse Integration
+
+#### AgentVerse Agent Details
+![AgentVerse Agent Details](screenshots/agentverse-agent-details.png)
+
+#### AgentVerse Local Agents
+![AgentVerse Local Agents](screenshots/agentverse-local-agents.png)
+
+#### AgentVerse Intent Agent Chat
+![AgentVerse Intent Agent Chat](screenshots/agent-verse-intent-agent-chat.png)
+
+#### AgentVerse Logs
+![AgentVerse Logs](screenshots/agent-verse-logs.png)
+
+### API Documentation
+
+#### FastAPI Docs
+![FastAPI Docs](screenshots/fast-api-docs.png)
+
+#### Info Page
+![Info Page](screenshots/info-page.png)
+
+### System Logs
+![Terminal Logs](screenshots/terminal-logs.png)
 
 ## Getting Started
 
@@ -97,26 +139,6 @@ python agents/intent_classifier_agent.py
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-
-
-## Project Structure
-
-```text
-.
-├── agents/
-│   ├── sql_agent.py
-│   ├── document_agent.py
-│   ├── hybrid_agent.py
-│   ├── intent_classifier.py
-│   ├── error_handler.py
-├── data/
-│   └── project.db
-├── utils/
-│   ├── sql_utils.py
-│   ├── embedding_utils.py
-├── README.md
-└── requirements.txt
-```
 
 ## Example Query Flow
 
