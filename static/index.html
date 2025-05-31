@@ -316,6 +316,35 @@
         <!-- Documents Tab -->
         <div v-show="activeTab === 'documents'" class="glass-effect messages-container overflow-y-auto p-6">
             <div class="max-w-4xl mx-auto">
+                <!-- Login/Logout Button -->
+                <div class="flex justify-end mb-4">
+                    <button v-if="!isLoggedIn" @click="showLogin = true" class="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-lg shadow hover:from-purple-600 hover:to-pink-600 transition-all">Login</button>
+                    <div v-else class="flex items-center space-x-2">
+                        <span class="text-sm text-gray-700">Logged in as <b>admin</b></span>
+                        <button @click="logout" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-lg transition-all">Logout</button>
+                    </div>
+                </div>
+                <!-- Login Modal -->
+                <div v-if="showLogin" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+                    <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm relative animate-fade-in">
+                        <button @click="showLogin = false" class="absolute top-2 right-2 text-gray-400 hover:text-gray-700">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                        <h2 class="text-xl font-bold mb-4 text-center text-purple-700">Admin Login</h2>
+                        <form @submit.prevent="login">
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-1">Admin ID</label>
+                                <input v-model="loginId" type="text" class="w-full border rounded-lg px-3 py-2" required autofocus />
+                            </div>
+                            <div class="mb-6">
+                                <label class="block text-gray-700 mb-1">Password</label>
+                                <input v-model="loginPassword" type="password" class="w-full border rounded-lg px-3 py-2" required />
+                            </div>
+                            <button type="submit" :disabled="loggingIn" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-2 rounded-lg font-semibold shadow hover:from-purple-600 hover:to-pink-600 transition-all">{{ loggingIn ? 'Logging in...' : 'Login' }}</button>
+                            <div v-if="loginError" class="text-red-600 text-sm mt-3 text-center">{{ loginError }}</div>
+                        </form>
+                    </div>
+                </div>
                 <!-- Toggle between Documents and Database -->
                 <div class="flex justify-center mb-8">
                     <button @click="dbTab = 'documents'" :class="['px-6 py-2 rounded-l-lg font-semibold', dbTab === 'documents' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700']">Documents</button>
@@ -598,6 +627,12 @@
                     connectingRemoteDb: false,
                     remoteDbStatus: null,
                     showRemoteDbForm: false,
+                    showLogin: false,
+                    loginId: '',
+                    loginPassword: '',
+                    loggingIn: false,
+                    loginError: '',
+                    isLoggedIn: false,
                 };
             },
             methods: {
@@ -646,7 +681,7 @@
                     });
 
                     try {
-                        const res = await fetch('http://localhost:9000/query', {
+                        const res = await fetch('http://localhost:8000/query', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ query: currentQuery }),
@@ -700,7 +735,7 @@
                 async fetchDocuments() {
                     this.loading = true;
                     try {
-                        const res = await fetch('http://localhost:9000/document');
+                        const res = await fetch('http://localhost:8000/document');
                         const data = await res.json();
                         if (!data.message) {
                             this.documents = data;
@@ -738,7 +773,11 @@
 
                 async uploadFiles() {
                     if (this.selectedFiles.length === 0) return;
-
+                    const token = this.getToken();
+                    if (!token) {
+                        alert('Please login first.');
+                        return;
+                    }
                     this.uploading = true;
                     try {
                         const formData = new FormData();
@@ -746,11 +785,16 @@
                             formData.append('files', file);
                         });
 
-                        const res = await fetch('http://localhost:9000/document', {
+                        const res = await fetch(`http://localhost:8000/document?token=${token}`, {
                             method: 'POST',
                             body: formData,
                         });
 
+                        if (res.status === 401) {
+                            this.logout();
+                            alert('Session expired. Please login again.');
+                            return;
+                        }
                         if (res.ok) {
                             this.selectedFiles = [];
                             this.$refs.files.value = '';
@@ -767,12 +811,21 @@
                 },
 
                 async deleteDocument(id) {
+                    const token = this.getToken();
+                    if (!token) {
+                        alert('Please login first.');
+                        return;
+                    }
                     if (!confirm('Are you sure you want to delete this document?')) return;
-
                     try {
-                        await fetch(`http://localhost:9000/document/${id}`, {
+                        const res = await fetch(`http://localhost:8000/document/${id}?token=${token}`, {
                             method: 'DELETE',
                         });
+                        if (res.status === 401) {
+                            this.logout();
+                            alert('Session expired. Please login again.');
+                            return;
+                        }
                         await this.fetchDocuments();
                     } catch (error) {
                         console.error('Error deleting document:', error);
@@ -789,15 +842,24 @@
                 },
                 async uploadSqliteFile() {
                     if (!this.selectedSqliteFile) return;
+                    const token = this.getToken();
+                    if (!token) {
+                        alert('Please login first.');
+                        return;
+                    }
                     this.uploadingSqlite = true;
                     try {
                         const formData = new FormData();
                         formData.append('file', this.selectedSqliteFile);
-                        // Dummy endpoint for now
-                        const res = await fetch('http://localhost:9000/upload-database', {
+                        const res = await fetch(`http://localhost:8000/upload-database?token=${token}`, {
                             method: 'POST',
                             body: formData,
                         });
+                        if (res.status === 401) {
+                            this.logout();
+                            alert('Session expired. Please login again.');
+                            return;
+                        }
                         if (res.ok) {
                             this.selectedSqliteFile = null;
                             this.$refs.sqliteFile.value = '';
@@ -813,15 +875,24 @@
                     }
                 },
                 async submitRemoteDb() {
+                    const token = this.getToken();
+                    if (!token) {
+                        alert('Please login first.');
+                        return;
+                    }
                     this.connectingRemoteDb = true;
                     this.remoteDbStatus = null;
                     try {
-                        // Dummy endpoint for now
-                        const res = await fetch('http://localhost:9000/update-remote-db', {
+                        const res = await fetch(`http://localhost:8000/update-remote-db?token=${token}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(this.remoteDb),
                         });
+                        if (res.status === 401) {
+                            this.logout();
+                            this.remoteDbStatus = { success: false, message: 'Session expired. Please login again.' };
+                            return;
+                        }
                         const data = await res.json();
                         if (res.ok) {
                             this.remoteDbStatus = { success: true, message: data.message || 'Connected successfully!' };
@@ -834,6 +905,39 @@
                     } finally {
                         this.connectingRemoteDb = false;
                     }
+                },
+                async login() {
+                    this.loggingIn = true;
+                    this.loginError = '';
+                    try {
+                        const form = new FormData();
+                        form.append('admin_id', this.loginId);
+                        form.append('password', this.loginPassword);
+                        const res = await fetch('http://localhost:8000/login', {
+                            method: 'POST',
+                            body: form
+                        });
+                        if (!res.ok) {
+                            throw new Error('Invalid credentials');
+                        }
+                        const data = await res.json();
+                        localStorage.setItem('agentflow_token', data.token);
+                        this.isLoggedIn = true;
+                        this.showLogin = false;
+                        this.loginId = '';
+                        this.loginPassword = '';
+                    } catch (e) {
+                        this.loginError = 'Invalid credentials';
+                    } finally {
+                        this.loggingIn = false;
+                    }
+                },
+                logout() {
+                    localStorage.removeItem('agentflow_token');
+                    this.isLoggedIn = false;
+                },
+                getToken() {
+                    return localStorage.getItem('agentflow_token');
                 },
             },
 
@@ -861,6 +965,7 @@
 
                 // Fetch documents on initial load
                 this.fetchDocuments();
+                this.isLoggedIn = !!localStorage.getItem('agentflow_token');
             }
         }).mount('#app');
     </script>

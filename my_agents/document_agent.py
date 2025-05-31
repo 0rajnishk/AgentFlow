@@ -5,16 +5,24 @@ then asks Gemini to answer in natural language using the retrieved context.
 
 Requirements
 ------------
-pip install uagents langchain-google-genai langchain-community google-generativeai faiss-cpu
+pip install uagents uagents-core langchain-google-genai langchain-community google-generativeai faiss-cpu
 Set env var:  export GOOGLE_API_KEY="YOUR_KEY"
 """
 
 import os
 import logging
+from datetime import datetime
+from uuid import uuid4
 from typing import List
 
 import google.generativeai as genai
-from uagents import Agent, Context, Model
+from uagents import Agent, Protocol, Context
+from uagents_core.contrib.protocols.chat import (
+    ChatAcknowledgement,
+    ChatMessage,
+    TextContent,
+    chat_protocol_spec,
+)
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -29,11 +37,12 @@ load_dotenv()
 # Globals: embeddings + vectorstore
 # ────────────────────────────────
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-DB_FOLDER = "vectorstores"
+DB_FOLDER = "../vectorstores"
 os.makedirs(DB_FOLDER, exist_ok=True)
 
-GENAI_API_KEY =  os.getenv("GOOGLE_API_KEY")
+GENAI_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GENAI_API_KEY:
     raise ValueError("GOOGLE_API_KEY environment variable not set. Please set it to your Google API key.")
 
@@ -74,42 +83,55 @@ VECTORSTORE = load_vectorstore()
 genai.configure(api_key=GENAI_API_KEY)
 GEMINI_MODEL = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
 
-# ────────────────────────────────
-# Agent messaging model
-# ────────────────────────────────
-class AgentMessage(Model):
-    query: str
-    request_id: str
+# ────────────────────────────────────────────────────────────────
+# Agent setup
+# ────────────────────────────────────────────────────────────────
+document_agent = Agent(name="documentAgent", mailbox=True, port=9002, endpoint=["http://localhost:9002/submit"])
+chat_proto = Protocol(spec=chat_protocol_spec)
 
-# ────────────────────────────────
-# Document Agent handler registration
-# ────────────────────────────────
-def register_document_agent_handlers(document_agent: Agent, intent_classifier_agent: Agent):
-    @document_agent.on_message(model=AgentMessage)
-    async def doc_handler(ctx: Context, sender: str, msg: AgentMessage):
-        logger.info(
-            f"DocumentAgent: Received query: {msg.query} (Request ID: {msg.request_id})"
-        )
+@document_agent.on_event("startup")
+async def startup_handler(ctx: Context):
+    ctx.logger.info(f"My name is {ctx.agent.name} and my address is {ctx.agent.address}")
+    if VECTORSTORE:
+        ctx.logger.info("DocumentAgent: Vector store loaded successfully - ready to process document queries")
+    else:
+        ctx.logger.warning("DocumentAgent: No vector store available - document queries will be limited")
 
-        # 1. Similarity search
-        if VECTORSTORE is None:
-            answer_text = (
-                "DocumentAgent could not answer because no policy documents are loaded."
+@chat_proto.on_message(ChatMessage)
+async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
+    for item in msg.content:
+        if isinstance(item, TextContent):
+            try:
+                request_id, user_query = item.text.split(":::", 1)
+            except ValueError:
+                ctx.logger.error(f"Malformed message format: {item.text}")
+                continue
+            ctx.logger.info(f"DocumentAgent: Received query from {sender}: {user_query} (Request ID: {request_id})")
+
+            # Send acknowledgement
+            ack = ChatAcknowledgement(
+                timestamp=datetime.utcnow(),
+                acknowledged_msg_id=msg.msg_id
             )
-            await ctx.send(
-                intent_classifier_agent.address,
-                AgentMessage(query=answer_text, request_id=msg.request_id),
-            )
-            logger.warning("No vectorstore available — returning fallback answer.")
-            return
+            await ctx.send(sender, ack)
 
-        docs = VECTORSTORE.similarity_search(msg.query, k=5)
-        context = "\n\n".join(d.page_content for d in docs)
-        logger.info(f"Similarity search returned {len(docs)} chunks for context.")
+            try:
+                # 1. Check if vectorstore is available
+                if VECTORSTORE is None:
+                    answer_text = (
+                        "DocumentAgent could not answer because no policy documents are loaded. "
+                        "Please ensure the vectorstore is properly configured and contains document embeddings."
+                    )
+                    ctx.logger.warning("No vectorstore available — returning fallback answer.")
+                else:
+                    # 2. Perform similarity search
+                    docs = VECTORSTORE.similarity_search(user_query, k=5)
+                    context = "\n\n".join(d.page_content for d in docs)
+                    ctx.logger.info(f"Similarity search returned {len(docs)} chunks for context.")
 
-
-        prompt = f"""
-**User Question:** "{msg.query}"
+                    # 3. Create prompt for Gemini
+                    prompt = f"""
+**User Question:** \"{user_query}\"
 
 **Relevant Patient Documents:**
 {context}
@@ -127,43 +149,36 @@ def register_document_agent_handlers(document_agent: Agent, intent_classifier_ag
 
 **Answer:**"""
 
+                    # 4. Call Gemini for answer generation
+                    try:
+                        response = GEMINI_MODEL.generate_content(prompt)
+                        answer_text = response.text.strip()
+                        ctx.logger.info("DocumentAgent: Successfully generated answer using document context")
+                    except Exception as e:
+                        ctx.logger.error(f"Gemini generation failed: {e}")
+                        answer_text = (
+                            "DocumentAgent encountered an error while generating the answer. "
+                            "Please try rephrasing your question or check if the documents contain relevant information."
+                        )
 
-        # 3. Call Gemini
-        try:
-            response = GEMINI_MODEL.generate_content(prompt)
-            answer_text = response.text
-            # # Log the full response for debugging
-            # logger.info(f"Gemini response: {answer_text}")
-        except Exception as e:
-            logger.exception("Gemini generation failed.")
-            answer_text = (
-                "DocumentAgent encountered an error while generating the answer."
+            except Exception as e:
+                ctx.logger.error(f"DocumentAgent processing error: {e}")
+                answer_text = f"I encountered an error while processing your document query: {str(e)}"
+
+            # Send reply in the required format
+            reply = ChatMessage(
+                timestamp=datetime.utcnow(),
+                msg_id=uuid4(),
+                content=[TextContent(type="text", text=f"{request_id}:::{answer_text}")],
             )
+            await ctx.send(sender, reply)
+            ctx.logger.info(f"DocumentAgent: Response sent to {sender}")
 
-        # 4. Send answer back to IntentClassifier
-        await ctx.send(
-            intent_classifier_agent.address,
-            AgentMessage(query=answer_text, request_id=msg.request_id),
-        )
+@chat_proto.on_message(ChatAcknowledgement)
+async def handle_ack(ctx: Context, sender: str, msg: ChatAcknowledgement):
+    ctx.logger.info(f"DocumentAgent: Received acknowledgement from {sender} for {msg.acknowledged_msg_id}")
 
-        logger.info(f"DocumentAgent: Sent response for {msg.request_id} back to Intent Classifier.")
+document_agent.include(chat_proto, publish_manifest=True)
 
-
-
-# from uagents import Agent, Context, Model
-# import logging
-
-# # Define common models
-# class AgentMessage(Model):
-#     query: str
-#     request_id: str
-
-# # This function will be called from agents.py to register handlers
-# def register_document_agent_handlers(document_agent: Agent, intent_classifier_agent: Agent):
-#     @document_agent.on_message(model=AgentMessage)
-#     async def doc_handler(ctx: Context, sender: str, msg: AgentMessage):
-#         logging.info(f"DocumentAgent: Received query: {msg.query} (Request ID: {msg.request_id})")
-#         # --- REAL DOCUMENT LOGIC GOES HERE ---
-#         response_msg = f"I am documentAgent: I handle document-related queries. Your query: '{msg.query}'."
-#         await ctx.send(intent_classifier_agent.address, AgentMessage(query=response_msg, request_id=msg.request_id))
-#         logging.info(f"DocumentAgent: Sent response for {msg.request_id} back to Intent Classifier.")
+if __name__ == "__main__":
+    document_agent.run()

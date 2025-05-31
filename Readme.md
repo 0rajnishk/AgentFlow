@@ -77,6 +77,13 @@ python agents/intent_classifier.py
 python agents/error_handler.py
 ```
 
+# Run them main.py our FastAPI server
+```bash
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+
+
 ## Project Structure
 
 ```text

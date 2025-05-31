@@ -1,73 +1,64 @@
+# intent_classifier_agent.py
 """
-intent_classifier_agent.py
-Full implementation with Gemini-based intent classification
-
-Requirements:
-- uagents >= 0.3.1
-- google-generativeai  (pip install google-generativeai)
-- A valid Google AI API key exported:  export GOOGLE_API_KEY="YOUR_KEY"
+Intent Classifier Agent with real Gemini-based classification logic
+Uses chat protocols for communication between agents
+Handles queries from FastAPI/file and from any agent (including unknown/other agents).
 """
 
 import os
 import re
 import json
 import logging
-from typing import Tuple
+from datetime import datetime
+from uuid import uuid4
+from typing import Tuple, Dict
 
 import google.generativeai as genai
-from uagents import Agent, Context, Model
+from uagents import Agent, Protocol, Context
+from uagents_core.contrib.protocols.chat import (
+    ChatAcknowledgement,
+    ChatMessage,
+    TextContent,
+    chat_protocol_spec,
+)
 from dotenv import load_dotenv
 
-
+# Load environment variables
 load_dotenv()
-GENAI_API_KEY =  os.getenv("GOOGLE_API_KEY")
+GENAI_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 if not GENAI_API_KEY:
     raise ValueError("GOOGLE_API_KEY environment variable not set. Please set it to your Google API key.")
-# ────────────────────────────────
-# Common message model
-# ────────────────────────────────
-class AgentMessage(Model):
-    query: str
-    request_id: str
 
+# Configure Gemini
+genai.configure(api_key=GENAI_API_KEY)
 
-# ────────────────────────────────
+# ---------- AGENT SETUP ----------
+intent_classifier = Agent(
+    name="intent_classifier", 
+    mailbox=True, 
+    port=9000, 
+    # endpoint=["http://localhost:9000/submit"]
+)
+
+# Replace these with the actual addresses printed by each worker agent at startup
+SQL_AGENT_ADDR = "agent1qdqugwl544acynqy9adencrw9kd5hs6jlu6cdmkzhqhzueeflktcgv4w3y5"
+DOC_AGENT_ADDR = "agent1q2tpmsy506wtsdn0j7823s2vdm7f50l485azzc6z8lh2zk50cqwevn03e6q"
+HYBRID_AGENT_ADDR = "agent1q0sh6f3n2r8azrs524chrn0e7h7p3qkm25v502jzczkrgjmtnhe972h2g64"
+ERROR_AGENT_ADDR = "agent1q08hrn7j6t7ywmwdllrvl903t08sn4xd2ua2t4hy4kd6uxspqq0rgaudrpx"
+
+WORKER_ADDRS = {SQL_AGENT_ADDR, DOC_AGENT_ADDR, HYBRID_AGENT_ADDR, ERROR_AGENT_ADDR}
+
+chat_proto = Protocol(spec=chat_protocol_spec)
+
 # File paths for FastAPI ↔ agents IPC
-# ────────────────────────────────
-QUERY_FILE_PATH = "query_to_agents.txt"
-RESPONSE_FILE_PATH = "response_from_agents.txt"
+QUERY_FILE_PATH = "../query_to_agents.txt"
+RESPONSE_FILE_PATH = "../response_from_agents.txt"
 
+# In-memory mapping: request_id -> original sender (for agent-to-agent queries)
+REQUEST_SENDER_MAP: Dict[str, str] = {}
 
-# ────────────────────────────────
-# Gemini helper utilities
-# ────────────────────────────────
-# PROMPT_TEMPLATE = """You are a precise query classifier for supply chain management systems.
-
-# TASK: Classify this query into exactly ONE category:
-
-# CATEGORIES:
-# - document_only: Asks about policies, procedures, definitions, compliance, or guidelines
-# - database_only: Asks for data, metrics, statistics, lists, counts, or performance analysis
-# - hybrid: Requires both policy knowledge AND data analysis
-# - unclear: Vague, incomplete, or ambiguous queries
-
-# USER: supply_chain_user
-# QUERY: "{query}"
-
-# CRITICAL: Respond with ONLY this exact JSON structure (no extra text):
-# {{
-#     "query_type": "document_only",
-#     "confidence": 0.95,
-#     "reasoning": "Brief explanation",
-#     "keywords": ["key", "terms"],
-#     "suggested_sources": ["documents"]
-# }}
-
-# IMPORTANT:
-# - suggested_sources must be an array, use ["documents"] OR ["database"] OR ["documents", "database"]
-# - Do NOT use "both" - use ["documents", "database"] instead
-# - Ensure all fields are properly formatted as JSON"""
+# Gemini prompt template
 PROMPT_TEMPLATE = """You are a precise query classifier for a medical information management system.
 
 TASK: Classify this query into exactly ONE category:
@@ -95,12 +86,6 @@ IMPORTANT:
 - Do NOT use "both" — use ["documents", "database"] instead
 - Ensure all fields are properly formatted as JSON"""
 
-
-
-
-genai.configure(api_key=GENAI_API_KEY)
-
-
 def get_gemini_response(query: str) -> str:
     """Send prompt to Gemini and return raw text response."""
     model = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
@@ -108,10 +93,9 @@ def get_gemini_response(query: str) -> str:
     try:
         response = model.generate_content(prompt)
         return response.text
-    except Exception as e:  # pragma: no cover
+    except Exception as e:
         logging.exception("Gemini request failed")
         return f"Error: {e}"
-
 
 def clean_model_response(text: str) -> str:
     """Strip markdown fences and extract the JSON blob."""
@@ -130,7 +114,6 @@ def clean_model_response(text: str) -> str:
 
     return text.strip()
 
-
 def classify_query_with_gemini(query: str) -> Tuple[str, dict]:
     """
     Return the category chosen by Gemini and full parsed result.
@@ -141,221 +124,136 @@ def classify_query_with_gemini(query: str) -> Tuple[str, dict]:
     try:
         parsed = json.loads(cleaned)
         return parsed.get("query_type", "unclear"), parsed
-    except Exception:  # pragma: no cover
+    except Exception:
         logging.error("Failed to parse Gemini output: %s", cleaned)
         return "unclear", {}
 
+# ---------- READ USER QUERY FROM FILE ----------
+@intent_classifier.on_interval(period=1.0)
+async def check_query_file(ctx: Context):
+    if os.path.exists(QUERY_FILE_PATH):
+        with open(QUERY_FILE_PATH, "r+") as f:
+            query_line = f.readline().strip()
+            if query_line:
+                try:
+                    request_id, query_text = query_line.split(":::", 1)
+                    # Mark this as a file-originated request (sender=None)
+                    message_text = f"{request_id}:::{query_text}"
+                    msg = ChatMessage(
+                        timestamp=datetime.utcnow(),
+                        msg_id=uuid4(),
+                        content=[TextContent(type="text", text=message_text)],
+                    )
+                    # Store sender as None for file-originated requests
+                    REQUEST_SENDER_MAP[request_id] = None
+                    await ctx.send(intent_classifier.address, msg)
+                    ctx.logger.info(f"IntentClassifier: Pulled query '{query_text}' (ID: {request_id}) from file")
+                except ValueError:
+                    ctx.logger.error(f"Malformed line in query file: {query_line}")
+                f.truncate(0)  # clear after reading
 
-# ────────────────────────────────
-# Registration helper (called from agents.py)
-# ────────────────────────────────
-def register_intent_classifier_handlers(
-    intent_classifier_agent: Agent,
-    sql_agent: Agent,
-    document_agent: Agent,
-    hybrid_agent: Agent,
-    error_handler_agent: Agent,
-):
-    # ── Poll FastAPI-written query file ───────────────────────────
-    @intent_classifier_agent.on_interval(period=1.0)
-    async def check_query_file(ctx: Context):
-        if os.path.exists(QUERY_FILE_PATH):
-            with open(QUERY_FILE_PATH, "r+") as f:
-                query_line = f.readline().strip()
-                if query_line:
-                    try:
-                        request_id, query_text = query_line.split(":::", 1)
-                        await ctx.send(
-                            intent_classifier_agent.address,
-                            AgentMessage(query=query_text, request_id=request_id),
-                        )
-                        logging.info(
-                            "IntentClassifier: Pulled query '%s' (ID: %s)",
-                            query_text,
-                            request_id,
-                        )
-                    except ValueError:
-                        logging.error("Malformed line in query file: %s", query_line)
-                    f.truncate(0)  # clear after reading
+# ---------- CLASSIFY AND ROUTE MESSAGES ----------
+@chat_proto.on_message(ChatMessage)
+async def classify_and_route(ctx: Context, sender: str, msg: ChatMessage):
+    for item in msg.content:
+        if not isinstance(item, TextContent):
+            continue
 
-    # ── Main on_message handler ──────────────────────────────────
-    @intent_classifier_agent.on_message(model=AgentMessage)
-    async def classify(ctx: Context, sender: str, msg: AgentMessage):
+        text = item.text
 
-        # log these above prints
-        logging.info(
-            "IntentClassifier: Received message from %s: %s (Request ID: %s)",
-            sender,
-            msg.request_id,
-        )
-        # If message comes back from downstream agents, write the final answer
-        if sender != intent_classifier_agent.address:
-            with open(RESPONSE_FILE_PATH, "w") as f:
-                f.write(f"{msg.request_id}:::{msg.query}")
-            logging.info(
-                "IntentClassifier: Wrote response for %s to %s",
-                msg.request_id,
-                RESPONSE_FILE_PATH,
+        # If this is a response from a worker agent (SQL/DOC/HYBRID/ERROR)
+        if sender in WORKER_ADDRS:
+            try:
+                request_id, response_text = text.split(":::", 1)
+            except ValueError:
+                ctx.logger.error(f"Malformed response from worker: {text}")
+                return
+
+            # Check if this was a file-originated request
+            orig_sender = REQUEST_SENDER_MAP.pop(request_id, None)
+            if orig_sender is None:
+                # Write to file for FastAPI
+                with open(RESPONSE_FILE_PATH, "w") as f:
+                    f.write(f"{request_id}:::{response_text}")
+                ctx.logger.info(f"IntentClassifier: Wrote response for {request_id} to {RESPONSE_FILE_PATH}")
+            else:
+                # Forward response back to the original agent
+                reply = ChatMessage(
+                    timestamp=datetime.utcnow(),
+                    msg_id=uuid4(),
+                    content=[TextContent(type="text", text=f"{request_id}:::{response_text}")],
+                )
+                await ctx.send(orig_sender, reply)
+                ctx.logger.info(f"IntentClassifier: Routed response for {request_id} back to agent {orig_sender}")
+
+            # Send acknowledgment to worker
+            ack = ChatAcknowledgement(
+                timestamp=datetime.utcnow(),
+                acknowledged_msg_id=msg.msg_id,
             )
+            await ctx.send(sender, ack)
             return
 
-        # New query – run Gemini classification
-        category, parsed = classify_query_with_gemini(msg.query)
-        logging.info(
-            "IntentClassifier: Gemini classified '%s' as %s | confidence=%s",
-            msg.query,
-            category,
-            parsed.get("confidence"),
+        # If this is a query from self (file) or any other agent (not a worker)
+        if ":::" in text:
+            try:
+                request_id, query_text = text.split(":::", 1)
+            except ValueError:
+                ctx.logger.error(f"Malformed message format: {text}")
+                return
+        else:
+            # Message from another agent without request_id, generate one
+            request_id = str(uuid4())
+            query_text = text
+            if sender != intent_classifier.address:
+                REQUEST_SENDER_MAP[request_id] = sender
+                ctx.logger.info(f"IntentClassifier: Received query from agent {sender} (ID: {request_id}) [auto-generated]")
+            # Repackage as a ChatMessage in the expected format for downstream
+            msg = ChatMessage(
+                timestamp=datetime.utcnow(),
+                msg_id=uuid4(),
+                content=[TextContent(type="text", text=f"{request_id}:::{query_text}")],
+            )
+
+        # If sender is not self, this is a query from another agent (not a worker)
+        if sender != intent_classifier.address and request_id not in REQUEST_SENDER_MAP:
+            REQUEST_SENDER_MAP[request_id] = sender
+            ctx.logger.info(f"IntentClassifier: Received query from agent {sender} (ID: {request_id})")
+
+        # Run Gemini classification
+        category, parsed = classify_query_with_gemini(query_text)
+        ctx.logger.info(
+            f"IntentClassifier: Gemini classified '{query_text}' as {category} | confidence={parsed.get('confidence')}"
         )
 
-        # Route to appropriate agent
+        # Determine destination agent
+        dest_addr = ERROR_AGENT_ADDR  # default fallback
+
         if category == "hybrid":
-            await ctx.send(hybrid_agent.address, msg)
+            dest_addr = HYBRID_AGENT_ADDR
         elif category == "database_only":
-            await ctx.send(sql_agent.address, msg)
+            dest_addr = SQL_AGENT_ADDR
         elif category == "document_only":
-            await ctx.send(document_agent.address, msg)
-        else:
-            await ctx.send(error_handler_agent.address, msg)
+            dest_addr = DOC_AGENT_ADDR
+        else:  # unclear or any other category
+            dest_addr = ERROR_AGENT_ADDR
 
+        # Forward message to appropriate worker agent
+        await ctx.send(dest_addr, msg)
+        ctx.logger.info(f"IntentClassifier: Routed query (ID: {request_id}) to {category} agent ({dest_addr})")
 
+# ---------- ACK HANDLER ----------
+@chat_proto.on_message(ChatAcknowledgement)
+async def handle_ack(ctx: Context, sender: str, msg: ChatAcknowledgement):
+    ctx.logger.info(f"ACK from {sender} for {msg.acknowledged_msg_id}")
 
+# ---------- STARTUP HANDLER ----------
+@intent_classifier.on_event("startup")
+async def startup_handler(ctx: Context):
+    ctx.logger.info(f"Intent Classifier started - Name: {ctx.agent.name}, Address: {ctx.agent.address}")
 
+intent_classifier.include(chat_proto, publish_manifest=True)
 
-
-# import os
-# import logging
-# from uagents import Agent, Context, Model
-
-# # --- Agent Models (repeated for clarity, but ideally in a common 'models.py') ---
-# class AgentMessage(Model):
-#     query: str
-#     request_id: str
-
-# # --- Agent Definition ---
-# intent_classifier = Agent(name="intent_classifier")
-
-# # --- File paths for inter-process communication ---
-# QUERY_FILE_PATH = "query_to_agents.txt"
-# RESPONSE_FILE_PATH = "response_from_agents.txt"
-
-# # ----------------- INTENT CLASSIFIER HANDLERS -----------------
-
-# @intent_classifier.on_interval(period=1.0) # Check for queries every 1 second
-# async def check_query_file(ctx: Context):
-#     if os.path.exists(QUERY_FILE_PATH):
-#         with open(QUERY_FILE_PATH, "r+") as f:
-#             query_line = f.readline().strip()
-#             if query_line:
-#                 try:
-#                     request_id, query_text = query_line.split(":::", 1)
-#                     await ctx.send(
-#                         intent_classifier.address, # Send to itself to trigger its on_message handler
-#                         AgentMessage(query=query_text, request_id=request_id)
-#                     )
-#                     logging.info(f"IntentClassifier: Read query '{query_text}' (ID: {request_id}) from file. Sent to self for classification.")
-#                 except ValueError:
-#                     logging.error(f"IntentClassifier: Invalid query format in file: {query_line}")
-#                 f.truncate(0) # Clear the file after reading
-
-# @intent_classifier.on_message(model=AgentMessage)
-# async def classify(ctx: Context, sender: str, msg: AgentMessage):
-#     # This handler acts as the main entry point for new queries AND the exit point for responses.
-#     logging.info(f"IntentClassifier: Received message from {sender}: {msg.query} (Request ID: {msg.request_id})")
-
-#     # If the message is a response coming back from another agent, write it to the response file
-#     # This assumes other agents send back to intent_classifier.address as the final relay point.
-#     if sender != intent_classifier.address:
-#         with open(RESPONSE_FILE_PATH, "w") as f:
-#             f.write(f"{msg.request_id}:::{msg.query}")
-#         logging.info(f"IntentClassifier: Wrote final response for {msg.request_id} to {RESPONSE_FILE_PATH}.")
-#         return # Processing of this response is complete
-
-#     # If the message is a new query (from itself, after reading the file), classify it
-#     query = msg.query.lower()
-#     has_sql = "sql" in query
-#     has_doc = "document" in query
-
-
-#     if has_sql and has_doc:
-#         await ctx.send("hybridAgent address placeholder", msg) # Replaced with actual object below
-#         logging.info(f"IntentClassifier: Classified '{query}' as Hybrid. Sending to Hybrid Agent.")
-#     elif has_sql:
-#         await ctx.send("sqlAgent address placeholder", msg) # Replaced with actual object below
-#         logging.info(f"IntentClassifier: Classified '{query}' as SQL. Sending to SQL Agent.")
-#     elif has_doc:
-#         await ctx.send("documentAgent address placeholder", msg) # Replaced with actual object below
-#         logging.info(f"IntentClassifier: Classified '{query}' as Document. Sending to Document Agent.")
-#     else:
-#         await ctx.send("errorHandler address placeholder", msg) # Replaced with actual object below
-#         logging.info(f"IntentClassifier: Could not classify '{query}'. Sending to Error Handler.")
-
-# # This is cleaner.
-
-# from uagents import Agent, Context, Model
-# import logging
-# import os
-
-# # Define common models
-# class AgentMessage(Model):
-#     query: str
-#     request_id: str
-
-# # Define file paths
-# QUERY_FILE_PATH = "query_to_agents.txt"
-# RESPONSE_FILE_PATH = "response_from_agents.txt"
-
-
-# def register_intent_classifier_handlers(
-#     intent_classifier_agent: Agent,
-#     sql_agent: Agent,
-#     document_agent: Agent,
-#     hybrid_agent: Agent,
-#     error_handler_agent: Agent
-# ):
-#     @intent_classifier_agent.on_interval(period=1.0)
-#     async def check_query_file(ctx: Context):
-#         if os.path.exists(QUERY_FILE_PATH):
-#             with open(QUERY_FILE_PATH, "r+") as f:
-#                 query_line = f.readline().strip()
-#                 if query_line:
-#                     try:
-#                         request_id, query_text = query_line.split(":::", 1)
-#                         # Send to self to trigger classification
-#                         await ctx.send(
-#                             intent_classifier_agent.address,
-#                             AgentMessage(query=query_text, request_id=request_id)
-#                         )
-#                         logging.info(f"IntentClassifier: Read query '{query_text}' (ID: {request_id}) from file. Sent to self for classification.")
-#                     except ValueError:
-#                         logging.error(f"IntentClassifier: Invalid query format in file: {query_line}")
-#                     f.truncate(0) # Clear the file after reading
-
-#     @intent_classifier_agent.on_message(model=AgentMessage)
-#     async def classify(ctx: Context, sender: str, msg: AgentMessage):
-#         logging.info(f"IntentClassifier: Received message from {sender}: {msg.query} (Request ID: {msg.request_id})")
-
-#         if sender != intent_classifier_agent.address:
-#             # This is a response from another agent, write it to the response file
-#             with open(RESPONSE_FILE_PATH, "w") as f:
-#                 f.write(f"{msg.request_id}:::{msg.query}")
-#             logging.info(f"IntentClassifier: Wrote final response for {msg.request_id} to {RESPONSE_FILE_PATH}.")
-#             return
-
-#         # This is a new query from FastAPI, classify and send to appropriate agent
-#         query = msg.query.lower()
-#         has_sql = "sql" in query
-#         has_doc = "document" in query
-
-#         if has_sql and has_doc:
-#             await ctx.send(hybrid_agent.address, msg)
-#             logging.info(f"IntentClassifier: Classified '{query}' as Hybrid. Sending to Hybrid Agent.")
-#         elif has_sql:
-#             await ctx.send(sql_agent.address, msg)
-#             logging.info(f"IntentClassifier: Classified '{query}' as SQL. Sending to SQL Agent.")
-#         elif has_doc:
-#             await ctx.send(document_agent.address, msg)
-#             logging.info(f"IntentClassifier: Classified '{query}' as Document. Sending to Document Agent.")
-#         else:
-#             await ctx.send(error_handler_agent.address, msg)
-#             logging.info(f"IntentClassifier: Could not classify '{query}'. Sending to Error Handler.")
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    intent_classifier.run()
