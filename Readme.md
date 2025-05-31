@@ -2,6 +2,11 @@
 
 Agent Flow is a agent-based system built using the `uagents` framework. It combines document retrieval, SQL querying, and large language model reasoning to answer natural language questions. This system routes queries intelligently across different specialized agents to provide accurate, explainable, and context-aware responses.
 
+[![Watch the demo video](https://img.youtube.com/vi/b1CBpXBktng/0.jpg)](https://youtu.be/b1CBpXBktng)
+
+[Click to watch demo video](https://youtu.be/b1CBpXBktng)
+
+
 ## Overview
 
 The system consists of several agents, each with a specific responsibility:
