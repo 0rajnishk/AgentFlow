@@ -8,7 +8,8 @@ import os
 import re
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+, timezone
 from uuid import uuid4
 from typing import Tuple
 
@@ -135,7 +136,7 @@ async def check_query_file(ctx: Context):
                     # Create chat message with request_id embedded in the text
                     message_text = f"{request_id}:::{query_text}"
                     msg = ChatMessage(
-                        timestamp=datetime.utcnow(),
+                        time=timestamp=datetime.now(timezone.utc),
                         msg_id=uuid4(),
                         content=[TextContent(type="text", text=message_text)],
                     )
@@ -166,7 +167,7 @@ async def classify_and_route(ctx: Context, sender: str, msg: ChatMessage):
             
             # Send acknowledgment
             ack = ChatAcknowledgement(
-                timestamp=datetime.utcnow(),
+                time=timestamp=datetime.now(timezone.utc),
                 acknowledged_msg_id=msg.msg_id,
             )
             await ctx.send(sender, ack)

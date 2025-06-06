@@ -11,7 +11,8 @@ Set env var:  export GOOGLE_API_KEY="YOUR_KEY"
 
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+
 from uuid import uuid4
 from typing import List
 import json
@@ -157,7 +158,7 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
 
             # Send acknowledgement
             ack = ChatAcknowledgement(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 acknowledged_msg_id=msg.msg_id
             )
             await ctx.send(sender, ack)
@@ -185,7 +186,7 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
 
             # Send reply in the required format
             reply = ChatMessage(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 msg_id=uuid4(),
                 content=[TextContent(type="text", text=f"{request_id}:::{answer_text}")],
             )

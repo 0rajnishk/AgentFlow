@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timezone
+
 from uuid import uuid4
 import logging
 import os
@@ -56,7 +57,7 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
 
             # Send acknowledgement
             ack = ChatAcknowledgement(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 acknowledged_msg_id=msg.msg_id
             )
             await ctx.send(sender, ack)
@@ -71,7 +72,7 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
                 response_msg = "I couldn't process your question. Please try rephrasing it."
 
             reply = ChatMessage(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 msg_id=uuid4(),
                 content=[TextContent(type="text", text=f"{request_id}:::{response_msg}")],
             )

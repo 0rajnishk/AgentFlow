@@ -10,7 +10,8 @@ import json
 import sqlite3
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+
 from uuid import uuid4
 from typing import Any, Dict, List
 
@@ -370,7 +371,7 @@ async def handle_sql_query(ctx: Context, sender: str, msg: ChatMessage):
                     
                     # Send error response back
                     error_msg = ChatMessage(
-                        timestamp=datetime.utcnow(),
+                        timestamp=datetime.now(timezone.utc),
                         msg_id=uuid4(),
                         content=[TextContent(type="text", text=f"{request_id}:::{error_resp}")],
                     )
@@ -383,7 +384,7 @@ async def handle_sql_query(ctx: Context, sender: str, msg: ChatMessage):
 
                 # 4. Send response back
                 response_msg = ChatMessage(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     msg_id=uuid4(),
                     content=[TextContent(type="text", text=f"{request_id}:::{answer_text}")],
                 )
@@ -397,7 +398,7 @@ async def handle_sql_query(ctx: Context, sender: str, msg: ChatMessage):
 
             # Send acknowledgment
             ack = ChatAcknowledgement(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 acknowledged_msg_id=msg.msg_id
             )
             await ctx.send(sender, ack)

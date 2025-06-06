@@ -258,7 +258,7 @@ async def process_query(request: QueryRequest):
     logging.info(f"Received API query: '{request.query}' (Request ID: {request_id})")
 
     try:
-        with open(QUERY_FILE_PATH, "w") as f:
+        with open(QUERY_FILE_PATH, "w", encoding="utf-8") as f:
             f.write(f"{request_id}:::{request.query}")
         logging.info(f"Wrote query to {QUERY_FILE_PATH} for Request ID: {request_id}")
     except Exception as e:
@@ -289,7 +289,7 @@ async def process_query(request: QueryRequest):
 
     logging.error(f"Timeout waiting for agent response for Request ID: {request_id}")
     if os.path.exists(QUERY_FILE_PATH):
-        with open(QUERY_FILE_PATH, "w") as f:
+        with open(QUERY_FILE_PATH, "w", encoding="utf-8") as f:
             f.truncate(0)
     raise HTTPException(status_code=504, detail="Agent response timed out.")
 

@@ -9,7 +9,7 @@ import os
 import re
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Tuple, Dict
 
@@ -153,15 +153,18 @@ def classify_query_with_asi_one(query: str) -> Tuple[str, dict]:
 @intent_classifier.on_interval(period=1.0)
 async def check_query_file(ctx: Context):
     if os.path.exists(QUERY_FILE_PATH):
-        with open(QUERY_FILE_PATH, "r+") as f:
+        with open(QUERY_FILE_PATH, "r+", encoding="utf-8") as f:
             query_line = f.readline().strip()
             if query_line:
+                ctx.logger.info(f"Raw query_line: '{query_line}' (length: {len(query_line)}) ")
+                ctx.logger.info(f"Contains ':::': {':::' in query_line}")
+                ctx.logger.info(f"Repr of query_line: {repr(query_line)}")
                 try:
                     request_id, query_text = query_line.split(":::", 1)
                     # Mark this as a file-originated request (sender=None)
                     message_text = f"{request_id}:::{query_text}"
                     msg = ChatMessage(
-                        timestamp=datetime.utcnow(),
+                        timestamp=datetime.now(timezone.utc),
                         msg_id=uuid4(),
                         content=[TextContent(type="text", text=message_text)],
                     )
@@ -194,22 +197,22 @@ async def classify_and_route(ctx: Context, sender: str, msg: ChatMessage):
             orig_sender = REQUEST_SENDER_MAP.pop(request_id, None)
             if orig_sender is None:
                 # Write to file for FastAPI
-                with open(RESPONSE_FILE_PATH, "w") as f:
+                with open(RESPONSE_FILE_PATH, "w", encoding="utf-8") as f:
                     f.write(f"{request_id}:::{response_text}")
                 ctx.logger.info(f"IntentClassifier: Wrote response for {request_id} to {RESPONSE_FILE_PATH}")
             else:
                 # Forward response back to the original agent
                 reply = ChatMessage(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     msg_id=uuid4(),
                     content=[TextContent(type="text", text=f"{request_id}:::{response_text}")],
                 )
                 await ctx.send(orig_sender, reply)
                 ctx.logger.info(f"IntentClassifier: Routed response for {request_id} back to agent {orig_sender}")
 
-            # Send acknowledgment to worker
+            # Send acknowledgment
             ack = ChatAcknowledgement(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 acknowledged_msg_id=msg.msg_id,
             )
             await ctx.send(sender, ack)
@@ -231,7 +234,7 @@ async def classify_and_route(ctx: Context, sender: str, msg: ChatMessage):
                 ctx.logger.info(f"IntentClassifier: Received query from agent {sender} (ID: {request_id}) [auto-generated]")
             # Repackage as a ChatMessage in the expected format for downstream
             msg = ChatMessage(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 msg_id=uuid4(),
                 content=[TextContent(type="text", text=f"{request_id}:::{query_text}")],
             )
