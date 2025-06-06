@@ -50,7 +50,7 @@ The backend is built with **FastAPI** and provides a secure, modular interface f
 
 * **Python** – Core programming language for building the agent logic and backend.
 * **uAgents** – Agent-based microservices framework for defining and managing autonomous agents.
-* **Google ASI\:ONE API** – Used for advanced natural language understanding and SQL generation via large language models.
+* **Fetch AI ASI\:ONE API** – Used for advanced natural language understanding and SQL generation via large language models.
 * **SQLite** – Lightweight relational database for storing structured data such as orders, customers, and products.
 * **FAISS** – Facebook AI Similarity Search library for fast and efficient vector-based semantic retrieval over PDF documents.
 
