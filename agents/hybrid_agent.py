@@ -71,7 +71,7 @@ os.makedirs(VECTOR_FOLDER, exist_ok=True)
 # if not GOOGLE_API_KEY:
 #     raise RuntimeError("Please set GOOGLE_API_KEY environment variable.")
 # genai.configure(api_key=GOOGLE_API_KEY)
-# GEMINI_MODEL = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
+GEMINI_MODEL = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
 
 # Embeddings + vectorstore loader
 embeddings = GoogleGenerativeAIEmbeddings(
