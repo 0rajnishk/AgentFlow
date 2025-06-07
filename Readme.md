@@ -5,9 +5,12 @@ Agent Flow is a agent-based system built using the `uagents` framework. It combi
 
 [![Watch the demo video](https://img.youtube.com/vi/b1CBpXBktng/0.jpg)](https://youtu.be/b1CBpXBktng)
 
-[Click to watch demo video](https://youtu.be/b1CBpXBktng)
+[Click to watch demo video for round 1](https://youtu.be/b1CBpXBktng)
 
-video for round 2: [Click to watch demo video](https://www.youtube.com/watch?v=Op9RQ0L68u4)
+[Click to watch demo video for round 2](https://www.youtube.com/watch?v=Op9RQ0L68u4)
+
+[Final presentation link](https://agentflow.my.canva.site/)
+
 
 ## Overview
 
